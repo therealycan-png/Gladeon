@@ -6,8 +6,9 @@ Process (spec §22): three fresh auditors per round (A Linux/reliability, B secu
 |---|---|---|---|---|---|---|
 | 1 | 2.0 (`SPEC_PHASE1_v2.md`) | 61 (19/18/24) | 53 | 53 | 0 | No |
 | 2 | 2.1 (`SPEC_PHASE1_v2.1.md`) | 54 (17/17/20) | 49 | 49 | 0 | No |
+| 3 | 2.2 (`SPEC_PHASE1_v2.2.md`) | 45 (14/15/16) | 37 | 37 | 0 | No |
 
-Clean-round streak: **0 / 3**. Current revision under audit: 2.2 (`SPEC_PHASE1_v2.2.md`).
+Clean-round streak: **0 / 3**. Current revision under audit: 2.3 (`SPEC_PHASE1_v2.3.md`, self-contained).
 
 ---
 
@@ -158,3 +159,62 @@ Duplicates merged: B2-4 = A2-6; B2-6 = A2-13; B2-17 = C2-12; B2-10 = C2-16 (+ A2
 | C2-19 | MED | emphasis stripping mangles arithmetic | 12.4.1, P12 |
 | C2-20 | MED | header-lookalike regex bypass | 15.2.4, P11 |
 | C2 notes | – | chunk cap vs budget; `/slots` flag; `P` rule; emb key by dim; indexing idle definition; retry temperature | 13.4.7, 8.4, 12.4.3, 13.2, 11.7.1, 8.6.4 |
+
+---
+
+## Round 3 (spec rev 2.2 → fixes in rev 2.3)
+
+After round 3, Shawn was offered a scope reduction (explicit notes phrase instead of the guessing router, manual admin procedures, no DEEP swap, no remote rescue shell) and chose to **keep full scope** (D-16).
+
+Duplicates merged: A3-2 = B3-8; A3-3 = B3-5; A3-4 = B3-2; A3-7 = B3-7; A3-8 = B3-9; C3-13 = B3-6; C3-14 = B3-10; C3-7 ≈ B3-14. All 37 unique findings accepted; fixes tagged `(R3: id)`. Rev 2.3 is self-contained (C3-15: "as rev 2.1" references had dropped rules).
+
+| ID | Sev | Finding | Fix in 2.3 |
+|---|---|---|---|
+| A3-1 | HIGH | watchdog heartbeat kills the proxy during long normal operations | 7.2 liveness monitor with operation deadlines, P31b |
+| A3-2 | HIGH | `phone-replace` misses unit IP filters, Syncthing device, dropbear keys | 5.2.18, 5.3, 14.4, 16, P37 |
+| A3-3 | HIGH | `ssh … sudo … > file` cannot work with password sudo | 3.3.7 `sudo -S` + armored output, 5.3, P40 |
+| A3-4 | MED | `lock_intent` set too late | 5.2.4/5.2.9 `lock-intent-set`, 9.5.1, P23c |
+| A3-5 | MED | shutdown deadlock proxy ↔ mount ↔ privd | 5.2.1 `After=` mount, 6.3.8, P39 |
+| A3-6 | MED | remote path for root fsck failure does not exist | 0.3(b) console, 3.2.4 per-key forced command |
+| A3-7 | MED | detached copy unit cannot get the passphrase | 5.2.6, 5.2.15 `offline-copy-verify`, 14.3 |
+| A3-8 | MED | reencrypt holds privd's lock for hours | 5.2.16 transient rekey unit, 9.6 code 24 |
+| A3-9 | MED | update window lock undefined; unlock not blocked | 3.3.8, 9.6 code 23, P38 |
+| A3-10 | MED | new keyslots use default argon2 memory | 5.2.12, 19.2.5 |
+| A3-11 | MED | P31 bound below the worst case | 7.2 timings, P31 45 s |
+| A3-12 | MED | `ip=` may create a competing network file | 4.2.2 mask generator, 19.2.1 |
+| A3-13 | MED | switch-over check cannot fail | 3.3.3 reboot before purge |
+| A3-14 | MED | PSK change order needs a console | 16 step 1 |
+| A3 notes | – | lock budget sum; systemd-resolved; wifi-tune install; dropbear `from=`/TTY; SIGKILL in P23b | 9.5, 3.3.2, 4.2.4, 3.2.4, P23b |
+| B3-1 | HIGH | reencrypt keeps the compromised passphrase | 5.2.16 rekey keeps only new keyslots, P41 |
+| B3-2 | MED | (= A3-4) | |
+| B3-3 | MED | clock budget resets each reboot | 5.2.17 persistent budget, 10.6, P29b |
+| B3-4 | MED | privd/copy unit output leaks file names | 5.2.2, P28 |
+| B3-5 | MED | (= A3-3) | |
+| B3-6 | MED | fake date headers via header fields | 13.4.6, 15.2.4, P11 |
+| B3-7 | MED | (= A3-7) | |
+| B3-8 | MED | (= A3-2) | |
+| B3-9 | MED | (= A3-8) | |
+| B3-10 | MED | unclosed comments not stripped | 13.4.3, P11d |
+| B3-11 | MED | re-bootstrap has no MITM check | 3.3.7 pinned `known_hosts` + pin on admin USB, 16 |
+| B3-12 | MED | untrusted-clock rule contradicts the budget | 10.6 |
+| B3-13 | MED | replacement phone cannot get notes back | 14.4, 16 step 7 |
+| B3-14 | MED | clamped date unstable (≈ C3-7) | 13.4.2 |
+| B3-15 | MED | P30 cannot pass | P30 |
+| B3 notes | – | dropbear test with admin key; lockout count persisted; token file mode; header blob channel; copy-target identity by device | 19.3, 9.7, 5.3, 5.2.5, 14.3 |
+| C3-1 | HIGH | FTS-only hits almost never fire | 13.6.1 term building, 13.6.3 ≥ 70% rule, P6d |
+| C3-2 | HIGH | finance guard catches general questions | 12.2.2, P8 |
+| C3-3 | HIGH | personal-reference catches general questions | 12.2.3 subject rule + fallback rule, P8b, P8c |
+| C3-4 | MED | marker forms the tokenizer cannot match | 12.0, P5, P7 |
+| C3-5 | MED | permanent causes give "still reading" forever | 13.6.8 transient/permanent, 13.4.8, P6f |
+| C3-6 | MED | notes synced < 30 s ago get "not in notes" | 13.3.6–7, P6c |
+| C3-7 | MED | future-date clamp corrupts legitimate dates | 13.2 `declared_date`/`rank_date`, 13.4.2, 13.4.6, P11c |
+| C3-8 | MED | contradictory P12 vectors | 12.4.3, P12 |
+| C3-9 | MED | `emb_key` misses most vector-space changes | 13.2.2 |
+| C3-10 | MED | calibration on an incomplete index | 13.6.7 |
+| C3-11 | MED | strict floor disables implicit retrieval | 13.6.7, M12b |
+| C3-12 | MED | paragraph-break warmup is model-dependent | 8.6.5 |
+| C3-13 | MED | (= B3-6, plus Unicode confusables) | 15.2.4 |
+| C3-14 | MED | comment stripping vs code (≈ B3-10) | 13.4.3 |
+| C3-15 | MED | rewrite dropped normative rules | 13.2.1–6; rev 2.3 self-contained |
+| C3-16 | MED | DEEP BRAIN may exceed 200 s | 8.6.7, M9b |
+| C3 notes | – | fallback matching; vault state in router tests; RAM comparator / EMBED ceiling / duplicate `-np`; swap deadline; calibration markers and stale route | 12.2, 17 header, 8.3, 8.4, 12.3.2, 13.6.7 |
