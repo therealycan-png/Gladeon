@@ -5,8 +5,9 @@ Process (spec §22): three fresh auditors per round (A Linux/reliability, B secu
 | Round | Spec revision audited | Raw findings (A/B/C) | Unique after merge | Accepted | Rejected | Clean? |
 |---|---|---|---|---|---|---|
 | 1 | 2.0 (`SPEC_PHASE1_v2.md`) | 61 (19/18/24) | 53 | 53 | 0 | No |
+| 2 | 2.1 (`SPEC_PHASE1_v2.1.md`) | 54 (17/17/20) | 49 | 49 | 0 | No |
 
-Clean-round streak: **0 / 3**.
+Clean-round streak: **0 / 3**. Current revision under audit: 2.2 (`SPEC_PHASE1_v2.2.md`).
 
 ---
 
@@ -91,3 +92,69 @@ All findings were accepted. The fix location in rev 2.1 is tagged in the spec te
 | C-23 | MED | SQLite file name (= A-18) | 13.1 |
 | C-24 | MED | Skipped files keep stale chunks | 13.3.5, P21 |
 | Notes 1–5 | – | nonce out of system prefix; repeat_penalty 1.0 on BRAIN; embed query slot; fixed seed + k-of-n; more currency forms | all applied (15.3, 8.6.2, 8.4, 18, P12) |
+
+---
+
+## Round 2 (spec rev 2.1 → fixes in rev 2.2)
+
+Duplicates merged: B2-4 = A2-6; B2-6 = A2-13; B2-17 = C2-12; B2-10 = C2-16 (+ A2 note 5); C2-20 ⊂ B2-9. All accepted; fixes tagged `(R2: id)` in rev 2.2. Round 2 found mostly gaps in round 1 fixes (A-1, A-15, A-17, A-19, B-1, B-3, C-1, C-6, C-10, C-14, C-20, C-21) plus new areas (IPv6, update window, phone replacement, privd protocol).
+
+| ID | Sev | Finding | Fix in 2.2 |
+|---|---|---|---|
+| A2-1 | HIGH | dropbear host-key clash, stale keys in initramfs, `ip=` naming | 3.2.4, 19.2.7, 19.3 |
+| A2-2 | HIGH | copy-lock has no lifetime | 5.2.13 transient unit, 14.3 |
+| A2-3 | MED | adoption reopens a locked vault; embed/sync not restarted | 5.2.8 `lock_intent`, 6.3.5, P23c |
+| A2-4 | MED | start limit counts deliberate starts | 5.2.11, P36 |
+| A2-5 | MED | route metrics ineffective; ARP claim wrong | 4.2.3, 19.3 |
+| A2-6 | MED | phone loss needs a console (= B2-4) | 0.3, 3.3.7 offline admin key, 5.3 `phone-replace`, 16 |
+| A2-7 | MED | root fsck failure stops headless boot | 0.3, 3.2.1 |
+| A2-8 | MED | watchdog cannot see a dead listener | 7.2 heartbeat rule, P31 |
+| A2-9 | MED | Syncthing perms can lock the watcher out | 14.4 `ignorePerms`, P32 |
+| A2-10 | MED | no network procedure for provisioning/updates | 3.3.3, 3.3.8 update window |
+| A2-11 | MED | Syncthing runs while the clock is untrusted | 9.4.4, 10.7 |
+| A2-12 | MED | networkd has no hooks | 4.2.4 wifi-tune unit |
+| A2-13 | MED | IPv6 unfiltered (= B2-6) | 4.2.5, 4.4 |
+| A2-14 | MED | `nofail` can hide an unmounted /boot | 3.2.1, 19.2.4 |
+| A2-15 | MED | privd can hit its start limit | 5.2.1 |
+| A2-16 | MED | P25 misses the namespace case | 5.2.12, P25b |
+| A2-17 | MED | OpenBLAS build package missing | 3.3.2 |
+| A2 notes | – | shutdown ordering; stop timeouts; AF_ALG/sshd order; config check before start; calibration file on root | 6.3.8, 7.4.3, 5.2.1, 7.1.3, 9.4.4, 13.6.7 |
+| B2-1 | HIGH | 24 h bound per request, not cumulative | 10.6 per-boot budget, 9.6 code 22, P29b |
+| B2-2 | MED | BRAIN answers finishing after lock get cached | 9.5.3, P14 |
+| B2-3 | MED | restart resets auto-lock timer | 5.4, 9.8, 6.3.5, P23b |
+| B2-4 | MED | stolen-phone runbook not executable | (= A2-6) |
+| B2-5 | MED | token rotation not applied live | 5.3, 11.2.10, P30 |
+| B2-6 | MED | IPv6 link-local SSH (= A2-13) | 4.2.5, 4.4 |
+| B2-7 | MED | passphrase change does not revoke; header backup staged on disk | 5.3, 9.1.3 |
+| B2-8 | MED | privd protocol/ACL insufficient | 5.2.2–5.2.5, 5.2.12, 9.6 code 21 |
+| B2-9 | MED | malicious future date wins conflicts; regex bypass | 13.2, 13.4.2, 15.2.4, P11, P11c |
+| B2-10 | MED | calibration file on root (= C2-16) | 13.6.7 |
+| B2-11 | MED | keyboard/clipboard learning and sync | 3.3.7, 11.11.3 |
+| B2-12 | MED | app-private storage in cloud backup | 11.11.4 |
+| B2-13 | MED | PC Send & Receive can overwrite the phone's notes | D-15, 14.4 receive-only/Send Only |
+| B2-14 | MED | offline-copy device not validated | 14.3, P34 |
+| B2-15 | MED | pin format and cert delivery wrong for curl | 3.3.7 |
+| B2-16 | MED | peer-credential self-test cannot fail | 19.2.3 |
+| B2-17 | MED | USER_DEFINED tokens (= C2-12) | 8.2 |
+| B2 notes | – | dropbear host key; slot erase at lock; hidden comments; passphrase rule; proxy address families | 3.2.4, 9.5.4, 13.4.3, 5.2.10, 7.2 |
+| C2-1 | HIGH | first-person guards catch ordinary requests | 12.2.2–3, P8, P8b |
+| C2-2 | HIGH | chunks without vectors unreachable | 13.6.3, 13.6.8, P6d, P6e |
+| C2-3 | HIGH | DEEP swap has no failure path | 6.2.4, 8.3, P33 |
+| C2-4 | MED | finance guard misses pay/bill/magkano | 12.2.2, P7 |
+| C2-5 | MED | token and case rules undefined | 12.0, P8b |
+| C2-6 | MED | stickiness over-captures; route set undefined | 12.3, P10c |
+| C2-7 | MED | retries/fallback exceed client budget | 8.6.3, 11.9.3 |
+| C2-8 | MED | RAM plan misses compute buffers | 8.3 |
+| C2-9 | MED | EMBED sized to max seq | 8.3, 8.4 |
+| C2-10 | MED | free EMBED slot not guaranteed | 11.7.2, P35 |
+| C2-11 | MED | CPU plan cannot be applied unprivileged | 3.3.4, 8.5 |
+| C2-12 | MED | USER_DEFINED tokens may be plain text | 8.2, 8.6.5 |
+| C2-13 | MED | EMBED change has no driver | 13.2 vectors status, 13.5.7 |
+| C2-14 | MED | over-ceiling notes unreachable | 13.5.6, 13.6.3 |
+| C2-15 | MED | fresh notes get false "not in notes" | 13.3.6, 13.6.8, P6c |
+| C2-16 | MED | calibration as a second writer, lost on rebuild | 13.1, 13.6.7 |
+| C2-17 | MED | suite does not say if EMBED is stubbed | 17 header |
+| C2-18 | MED | M11 untestable outside swap | 8.3, 18 |
+| C2-19 | MED | emphasis stripping mangles arithmetic | 12.4.1, P12 |
+| C2-20 | MED | header-lookalike regex bypass | 15.2.4, P11 |
+| C2 notes | – | chunk cap vs budget; `/slots` flag; `P` rule; emb key by dim; indexing idle definition; retry temperature | 13.4.7, 8.4, 12.4.3, 13.2, 11.7.1, 8.6.4 |
