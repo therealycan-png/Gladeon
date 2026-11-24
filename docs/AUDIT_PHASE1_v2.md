@@ -7,8 +7,9 @@ Process (spec §22): three fresh auditors per round (A Linux/reliability, B secu
 | 1 | 2.0 (`SPEC_PHASE1_v2.md`) | 61 (19/18/24) | 53 | 53 | 0 | No |
 | 2 | 2.1 (`SPEC_PHASE1_v2.1.md`) | 54 (17/17/20) | 49 | 49 | 0 | No |
 | 3 | 2.2 (`SPEC_PHASE1_v2.2.md`) | 45 (14/15/16) | 37 | 37 | 0 | No |
+| 4 | 2.3 (`SPEC_PHASE1_v2.3.md`) | 32 (12/6/14) | 29 | 29 | 0 | No |
 
-Clean-round streak: **0 / 3**. Current revision under audit: 2.3 (`SPEC_PHASE1_v2.3.md`, self-contained).
+Clean-round streak: **0 / 3**. Current revision under audit: 2.4 (`SPEC_PHASE1_v2.4.md`, self-contained).
 
 ---
 
@@ -218,3 +219,44 @@ Duplicates merged: A3-2 = B3-8; A3-3 = B3-5; A3-4 = B3-2; A3-7 = B3-7; A3-8 = B3
 | C3-15 | MED | rewrite dropped normative rules | 13.2.1–6; rev 2.3 self-contained |
 | C3-16 | MED | DEEP BRAIN may exceed 200 s | 8.6.7, M9b |
 | C3 notes | – | fallback matching; vault state in router tests; RAM comparator / EMBED ceiling / duplicate `-np`; swap deadline; calibration markers and stale route | 12.2, 17 header, 8.3, 8.4, 12.3.2, 13.6.7 |
+
+---
+
+## Round 4 (spec rev 2.3 → fixes in rev 2.4)
+
+Auditors were told to apply the defect bar strictly (router gaps count only when a common phrasing breaks a stated invariant or listed test). Security reported 0 HIGH for the first time. Duplicates merged: A4-1 = B4-2; A4-2 = B4-1; A4-6 = B4-3. All 29 unique findings accepted; fixes tagged `(R4: id)`.
+
+| ID | Sev | Finding | Fix in 2.4 |
+|---|---|---|---|
+| A4-1 | HIGH | dropbear `no-pty` vs `RequestTTY yes` breaks remote root unlock (= B4-2) | 3.2.4 pty allowed, global `-c` kept |
+| A4-2 | HIGH | interrupted rekey undetected; unlock proceeds (= B4-1) | 5.2.7, 5.2.8, 5.2.10, 5.2.16, 9.6 codes 25–26, P41b |
+| A4-3 | MED | proxy `After=` mount deadlocks proxy-only stops | 6.3.8, 9.5.7 direct umount, P42 |
+| A4-4 | MED | privd `After=` mount reverses shutdown order | 5.2.1 `Before=` |
+| A4-5 | MED | system-stopping check depends on D-Bus | 5.2.19 privd `system-stopping`, 6.3.8 |
+| A4-6 | MED | proxy-writable floor bypasses the clock budget (= B4-3) | 5.2.17 privd floor, 10.3, P29d |
+| A4-7 | MED | P38 impossible (proxy stopped) | 3.3.8 restart proxy, P38 |
+| A4-8 | MED | `--pbkdf-memory` is only a cap | 5.2.12 forced iterations + check, 9.1, P43 |
+| A4-9 | MED | job results not persisted | 5.2.15, 5.2.16, 5.4 |
+| A4-10 | MED | fresh install never sets the Syncthing device | 3.3.7 pairing, 5.3 `sync-device` |
+| A4-11 | MED | GRUB `--unrestricted` mechanism and check missing | 3.2.5, 19.2.7 |
+| A4-12 | MED | cpu-plan runs before models exist | 3.3.4–5 |
+| A4 notes | – | key changes while /boot unmounted; lock-intent before 202; fsck deadline; idempotent phone-replace; llmkey group | 3.2.4, 9.5.1, 9.4.2, 5.3, 5.1 |
+| B4-4 | MED | Python stderr writers bypass excepthooks | 7.2 output hygiene, 5.2.2, P28 |
+| B4-5 | MED | secret-generation rules dropped in 2.3 | 3.2.3, 3.3.7 pin formula, 5.1, 5.4 |
+| B4-6 | MED | phone note attachments reach photo/cloud backup | 11.11.4–5 `.nomedia` |
+| B4 notes | – | status verbs vs ACL; known_hosts keys; global `-c`; symlink-safe config writes; phone residual + bundle deletion | 5.2.4, 3.3.7, 3.2.4, 5.2.18, 16 |
+| C4-1 | HIGH | "What did I write…" not personal | 12.2.3(a) base forms after did/have |
+| C4-2 | HIGH | postposed Tagalog POSS missed | 12.2.3(b) |
+| C4-3 | HIGH | "should I put / do I put" matched as personal | 12.2.3(a) |
+| C4-4 | HIGH | "How do I pay with GCash?" → finance | 12.2.2(b) |
+| C4-5 | MED | QUICK-on-DEEP may miss the 60 s deadline | 8.3, 8.6.7 |
+| C4-6 | MED | zram subtraction makes the small tier DEGRADED | 8.3 zram `mem_limit` |
+| C4-7 | MED | rescan ignores skip rules | 13.3.7, P6g |
+| C4-8 | MED | stale Syncthing temp files keep the index partial | 13.3.6, P6h |
+| C4-9 | MED | permanent faults counted as transient | 13.3.6, 13.6.8, P6i |
+| C4-10 | MED | "How much money do I have?" missed | 12.2.2(d), P7 |
+| C4-11 | MED | FTS stopwords omit markers/particles | 13.6.1 |
+| C4-12 | MED | contraction tokens not mapped | 12.0.2 |
+| C4-13 | MED | cancel during prompt processing untested | 8.4 batch size, 8.6.1 |
+| C4-14 | MED | `dated` suffix reintroduces future date to the conflict rule | 13.4.6, P11c, M4b |
+| C4 notes | – | fallback vs leak check order; PHP rule; P33 skip; LOADING scope and deep_failed effect; date grammar | 12.2, 15.3, 12.4.3, 8.3, 13.4.2 |
