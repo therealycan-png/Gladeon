@@ -10,9 +10,9 @@ Process (spec §22): three fresh auditors per round (A Linux/reliability, B secu
 | 4 | 2.3 (`SPEC_PHASE1_v2.3.md`) | 32 (12/6/14) | 29 | 29 | 0 | No |
 | 5 | 2.4 (`SPEC_PHASE1_v2.4.md`) | 17 (4/3/10) | 16 | 16 | 0 | No |
 | 6 | 2.5 (`SPEC_PHASE1_v2.5.md`) | 21 (5/8/8) | 18 | 18 | 0 | No |
-| 7 | 2.6 (`SPEC_PHASE1_v2.6.md`) | 24 (9/10/5) | 19 | pending | pending | No |
+| 7 | 2.6 (`SPEC_PHASE1_v2.6.md`) | 24 (9/10/5) | 19 | 19 | 0 | No |
 
-Clean-round streak: **0 / 3**. Current revision: 2.6 (`SPEC_PHASE1_v2.6.md`, self-contained). **Loop paused by Shawn after round 7 (2026-11-25); round 7 findings logged but not yet applied.**
+Clean-round streak: **0 / 3**. Current revision under audit: 2.7 (`SPEC_PHASE1_v2.7.md`, self-contained). Loop paused by Shawn after round 7 and resumed on his "go" (2026-11-25).
 
 ---
 
@@ -327,11 +327,11 @@ Duplicates merged: A6-1 ≈ B6-1; A6-2 = B6-2; A6-4 = B6-5. All 18 unique findin
 
 ---
 
-## Round 7 (spec rev 2.6) — LOGGED, NOT YET APPLIED (loop paused by Shawn)
+## Round 7 (spec rev 2.6 → fixes in rev 2.7)
 
-Duplicates merged: A7-1 = B7-2 (unlock forbidden during `syncing`); A7-4 ≈ B7-2 (stuck `manifest` state, no finish/abort verb); A7-2 ≈ B7-5 (tmpfs manifest lost after erase); A7-9 = B7-6 (root follows symlinks in `notes/`); A7-8 ≈ B7-9 (export verbs have no content channel or mount names). 19 unique findings. All look valid on first read; formal triage happens when the loop resumes.
+Duplicates merged: A7-1 = B7-2 (unlock forbidden during `syncing`); A7-4 ≈ B7-2 (stuck `manifest` state, no finish/abort verb); A7-2 ≈ B7-5 (tmpfs manifest lost after erase); A7-9 = B7-6 (root follows symlinks in `notes/`); A7-8 ≈ B7-9 (export verbs have no content channel or mount names). 19 unique findings. All 19 accepted and applied in rev 2.7 (tags `(R7: id)`).
 
-**Pattern:** 13 of the 19 concern the vault-rotation procedure and admin export verbs added in round 6. Planned direction (editor's proposal, not yet applied): use the verified offline copy as the comparison reference instead of a tmpfs manifest; one write-ahead persisted state (`copy_verified → erasing → new → none`) with explicit `rotation-finish`/`rotation-abort` verbs and unlock allowed except while `erasing`; admin verbs take opaque file IDs instead of paths; privd walks `notes/` with `O_NOFOLLOW` and regular files only.
+**Pattern:** 13 of the 19 concern the vault-rotation procedure and admin export verbs added in round 6. Applied in 2.7: use the verified offline copy as the comparison reference instead of a tmpfs manifest; one write-ahead persisted state (`copy_verified → erasing → new → none`) with explicit `rotation-finish`/`rotation-abort` verbs and unlock allowed except while `erasing`; admin verbs take opaque file IDs instead of paths; privd walks `notes/` with `O_NOFOLLOW` and regular files only.
 
 | ID | Sev | Finding (short) |
 |---|---|---|
