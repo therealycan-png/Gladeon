@@ -10,8 +10,9 @@ Process (spec §22): three fresh auditors per round (A Linux/reliability, B secu
 | 4 | 2.3 (`SPEC_PHASE1_v2.3.md`) | 32 (12/6/14) | 29 | 29 | 0 | No |
 | 5 | 2.4 (`SPEC_PHASE1_v2.4.md`) | 17 (4/3/10) | 16 | 16 | 0 | No |
 | 6 | 2.5 (`SPEC_PHASE1_v2.5.md`) | 21 (5/8/8) | 18 | 18 | 0 | No |
+| 7 | 2.6 (`SPEC_PHASE1_v2.6.md`) | 24 (9/10/5) | 19 | pending | pending | No |
 
-Clean-round streak: **0 / 3**. Current revision under audit: 2.6 (`SPEC_PHASE1_v2.6.md`, self-contained).
+Clean-round streak: **0 / 3**. Current revision: 2.6 (`SPEC_PHASE1_v2.6.md`, self-contained). **Loop paused by Shawn after round 7 (2026-11-25); round 7 findings logged but not yet applied.**
 
 ---
 
@@ -323,3 +324,37 @@ Duplicates merged: A6-1 ≈ B6-1; A6-2 = B6-2; A6-4 = B6-5. All 18 unique findin
 | C6-7 | MED | rank_date jumps to the event date | 13.4.2, P11c, M4d |
 | C6-8 | MED | DEEP tests without skip/force rules | M9b, P33b, 8.3 |
 | C6 notes | – | fillers/lock hint; stoplist and compounds; fixed-reply classes; ₱ clause; rank clamp and "0 left" wording | 12.2.1, 13.6.1, 12.3.2, 12.2.2(e), 13.4.2, 12.5 |
+
+---
+
+## Round 7 (spec rev 2.6) — LOGGED, NOT YET APPLIED (loop paused by Shawn)
+
+Duplicates merged: A7-1 = B7-2 (unlock forbidden during `syncing`); A7-4 ≈ B7-2 (stuck `manifest` state, no finish/abort verb); A7-2 ≈ B7-5 (tmpfs manifest lost after erase); A7-9 = B7-6 (root follows symlinks in `notes/`); A7-8 ≈ B7-9 (export verbs have no content channel or mount names). 19 unique findings. All look valid on first read; formal triage happens when the loop resumes.
+
+**Pattern:** 13 of the 19 concern the vault-rotation procedure and admin export verbs added in round 6. Planned direction (editor's proposal, not yet applied): use the verified offline copy as the comparison reference instead of a tmpfs manifest; one write-ahead persisted state (`copy_verified → erasing → new → none`) with explicit `rotation-finish`/`rotation-abort` verbs and unlock allowed except while `erasing`; admin verbs take opaque file IDs instead of paths; privd walks `notes/` with `O_NOFOLLOW` and regular files only.
+
+| ID | Sev | Finding (short) |
+|---|---|---|
+| A7-1 / B7-2 | HIGH | rotation forbids the unlock its own step 5 needs; `manifest` state cannot be cleared; no finish/abort verbs |
+| A7-2 / B7-5 | HIGH | tmpfs manifest lost on reboot after erase → nothing to verify against |
+| A7-3 | HIGH | `--verify` cannot finish on normal differences; recovery advice can overwrite newer phone edits |
+| A7-4 | HIGH | (merged into A7-1 / B7-2) |
+| A7-5 | MED | `vault-erase` not write-ahead (state written after the erase) |
+| A7-6 | MED | proxy `vault-open`/`vault-close` block behind long root verbs past their deadlines |
+| A7-7 | MED | privd crash mid-`vault-open` leaves the vault mounted while the proxy says locked |
+| A7-8 / B7-9 | MED | export verbs have no blob channel, mapping name or mount point |
+| A7-9 / B7-6 | MED | root walks a Syncthing-writable tree following symlinks (`/dev/zero`, root files) |
+| A7 notes | – | `set-time` in both lock lists; failed update-window `open` must clear the flag; `isLuks` exception only in `erased`; reconciliation rule for `lock_holder = vault-open` missing from 6.3.5; how admin triggers a lock; synccheck helper interface |
+| B7-1 | HIGH | vault file names passed as shell arguments over SSH → command injection by a note name |
+| B7-3 | MED | phone keeps trusting the old PC Syncthing device after rotation |
+| B7-4 | MED | safety-net copy may predate the manifest and need not be verified |
+| B7-7 | MED | 6.3.5 has no rule for an in-flight `vault-open` (P23d not normative) |
+| B7-8 | MED | sudo logs vault relpaths to the journal |
+| B7-10 | MED | runbook cannot see files a thief added (only replaced/deleted are in `.stversions`) |
+| B7 notes | – | `set-time` lock contradiction; two-secret helper for `offline-copy-export`; escape `Cs`; mark copy and header stale at erase; SSD remanence after erase |
+| C7-1 | MED | "permanent overrides" brings back false "not in notes" for fresh notes |
+| C7-2 | MED | budgets leave no room for abstain-then-GENERAL in swap QUICK-on-DEEP |
+| C7-3 | MED | rule 3 "date right after [" matched by pipe-less body dates |
+| C7-4 | MED | `retry_window_s` does not cover the 2 × load wait |
+| C7-5 | MED | rotation note-count check compares against `index.notes`, which cannot match |
+| C7 notes | – | filler stripping on patterns; "Can't search" vs "still reading" in P6c/P6e; P45 force/skip rule; edits vs "permanently"; `YYYY/MM/DD` speech and contraction-suffix scope |
