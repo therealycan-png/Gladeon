@@ -9,8 +9,9 @@ Process (spec §22): three fresh auditors per round (A Linux/reliability, B secu
 | 3 | 2.2 (`SPEC_PHASE1_v2.2.md`) | 45 (14/15/16) | 37 | 37 | 0 | No |
 | 4 | 2.3 (`SPEC_PHASE1_v2.3.md`) | 32 (12/6/14) | 29 | 29 | 0 | No |
 | 5 | 2.4 (`SPEC_PHASE1_v2.4.md`) | 17 (4/3/10) | 16 | 16 | 0 | No |
+| 6 | 2.5 (`SPEC_PHASE1_v2.5.md`) | 21 (5/8/8) | 18 | 18 | 0 | No |
 
-Clean-round streak: **0 / 3**. Current revision under audit: 2.5 (`SPEC_PHASE1_v2.5.md`, self-contained).
+Clean-round streak: **0 / 3**. Current revision under audit: 2.6 (`SPEC_PHASE1_v2.6.md`, self-contained).
 
 ---
 
@@ -289,3 +290,36 @@ Auditor A was interrupted by a usage limit and resumed to finish. Duplicate merg
 | C5-9 | MED | budget derivation has no order/minimum/source | 8.6.7 |
 | C5-10 | MED | untrusted clock uses future dates for ranking | 13.4.2 |
 | C5 notes | – | garbled currency sentence; list-marker definition; rescan timeout; calibration trigger; ₱ unused | 12.4.2–3, 13.3.7, 13.6.7, 12.2.2 |
+
+---
+
+## Round 6 (spec rev 2.5 → fixes in rev 2.6)
+
+Duplicates merged: A6-1 ≈ B6-1; A6-2 = B6-2; A6-4 = B6-5. All 18 unique findings accepted.
+
+**Design change (editor's decision):** in-place LUKS re-encryption ("rekey") produced new defects in rounds 3, 4, 5 and 6 (B3-1, A4-2, B4-1, A5-1, B5-1, B5-2, A6-1, A6-2, B6-1, B6-2, B6-3, B6-8). It is replaced by **vault rotation** (5.2.16): build a new vault with a new passphrase and re-sync the notes from the phone (the source of truth, D-15), with a fresh offline copy and a hash manifest as the safety net. The capability (recover from a compromised passphrase) is kept; the mechanism is far simpler. This is not a scope reduction.
+
+| ID | Sev | Finding | Fix in 2.6 |
+|---|---|---|---|
+| A6-1 | HIGH | resume keys never unlock the old volume key (≈ B6-1) | rekey removed → 5.2.16 vault rotation, P41, P41b |
+| A6-2 | MED | recovery key lost on interruption (= B6-2) | rotation returns it immediately (5.2.16 step 4) |
+| A6-3 | MED | lock-intent waits behind vault-open; naive bypass loses the lock | 5.2.7, 5.2.8, 5.2.9, code 28, P23c |
+| A6-4 | MED | no privd verbs for vault-fsck / lowering the floor (= B6-5) | 5.2.4, 5.3, 5.2.17 `clock-floor-set` |
+| A6-5 | MED | proxy cannot set privd-call deadlines | 5.2.7 `PRIVD_BUSY`, 5.2.10 `fsck_last_s`/`last_close_clean`, 9.4.2 |
+| A6 notes | – | directory modes, `InaccessiblePaths=/boot` in units; floor mutex; copy "interrupted" race; update-window close/open guards; Syncthing pre-start check on every start | 5.4, 7.2, 8.4, 14.4, 5.2.7, 5.2.15, 3.3.8 |
+| B6-1 | HIGH | rekey init drops old keyslots (≈ A6-1) | rekey removed |
+| B6-3 | MED | stale temporary keyslot record deletes a real keyslot | rekey removed |
+| B6-4 | MED | vault-status bypass lets a late vault-open leave the vault open | 5.2.8, 5.2.10 `lock_holder`, P23d |
+| B6-6 | MED | vault file names reach the admin terminal unescaped | 5.3 escaping, P28 |
+| B6-7 | MED | restoring on a receive-only PC never reaches the phone | 5.3 `versions-export`, 16 step 7 |
+| B6-8 | MED | new passphrases typed once; resume only with new passphrase | 5.3 typed twice, P41c (resume moot) |
+| B6 notes | – | tick vs set-time race; staging path; reencrypt keyslot in selfcheck; hidden HTML (accepted residual); rekey key cleanup | 5.2.7, 5.2.17, 5.4, 19.2.5 |
+| C6-1 | HIGH | fallback reserve leaves no room for BRAIN budgets | 12.2 streamed first-sentence decision, P45 |
+| C6-2 | MED | transient conditions persist under permanent faults | 13.6.8 "indexing allowed", permanent overrides, P6i |
+| C6-3 | MED | `embed_down_since` undefined from unlock / stale after lock | 13.6.8 |
+| C6-4 | MED | enclitics break personal-reference adjacency | 12.2.3, P5 |
+| C6-5 | MED | own-money questions with SUBJ markers miss the guard | 12.2.2(a), P7 |
+| C6-6 | MED | header fields still carry dates | 13.4.6, 15.3 rule 3, M4c |
+| C6-7 | MED | rank_date jumps to the event date | 13.4.2, P11c, M4d |
+| C6-8 | MED | DEEP tests without skip/force rules | M9b, P33b, 8.3 |
+| C6 notes | – | fillers/lock hint; stoplist and compounds; fixed-reply classes; ₱ clause; rank clamp and "0 left" wording | 12.2.1, 13.6.1, 12.3.2, 12.2.2(e), 13.4.2, 12.5 |
