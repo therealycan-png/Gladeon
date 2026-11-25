@@ -11,8 +11,9 @@ Process (spec §22): three fresh auditors per round (A Linux/reliability, B secu
 | 5 | 2.4 (`SPEC_PHASE1_v2.4.md`) | 17 (4/3/10) | 16 | 16 | 0 | No |
 | 6 | 2.5 (`SPEC_PHASE1_v2.5.md`) | 21 (5/8/8) | 18 | 18 | 0 | No |
 | 7 | 2.6 (`SPEC_PHASE1_v2.6.md`) | 24 (9/10/5) | 19 | 19 | 0 | No |
+| 8 | 2.7 (`SPEC_PHASE1_v2.7.md`) | 20 (8/6/6) | 16 | 16 | 0 | No (0 HIGH from all three auditors) |
 
-Clean-round streak: **0 / 3**. Current revision under audit: 2.7 (`SPEC_PHASE1_v2.7.md`, self-contained). Loop paused by Shawn after round 7 and resumed on his "go" (2026-11-25).
+Clean-round streak: **0 / 3**. Current revision: 2.8 (`SPEC_PHASE1_v2.8.md`, self-contained). Paused after round 8 for Shawn's usage check (he set a stop at 14% of his weekly limit).
 
 ---
 
@@ -358,3 +359,31 @@ Duplicates merged: A7-1 = B7-2 (unlock forbidden during `syncing`); A7-4 ≈ B7-
 | C7-4 | MED | `retry_window_s` does not cover the 2 × load wait |
 | C7-5 | MED | rotation note-count check compares against `index.notes`, which cannot match |
 | C7 notes | – | filler stripping on patterns; "Can't search" vs "still reading" in P6c/P6e; P45 force/skip rule; edits vs "permanently"; `YYYY/MM/DD` speech and contraction-suffix scope |
+
+---
+
+## Round 8 (spec rev 2.7 → fixes in rev 2.8)
+
+First round with **zero HIGH findings from all three auditors**. Duplicates merged: A8-2 ≈ B8-1; A8-5 = B8-2; A8-3 = B8-6; A8-7 = B8-5. All 16 unique findings (all MEDIUM) accepted; fixes tagged `(R8: id)`. Most concern edge cases of the rotation procedure introduced in round 7.
+
+| ID | Finding | Fix in 2.8 |
+|---|---|---|
+| A8-1 | `--compare` before sync completes → false "missing" overwrites newer phone edits; sync check has no owner | 5.2.16 sync check by gladeon-admin via local Syncthing API, required for start and compare; restore only if absent; P41e |
+| A8-2 / B8-1 | reference copy can be overwritten; rotation verbs lack state guards | 5.2.16 state table; copy refuses reference serial until finish; P41d |
+| A8-3 / B8-6 | stale `gladeon_copy_ro` / `gladeon_vault_fsck` after a privd crash | 5.2.22 cleanup; P48b |
+| A8-4 | blob send holds the verb lock with no timeout | 5.2.23 stage, release lock, 30 s send timeout; P49 |
+| A8-5 / B8-2 | `--resume` cannot repeat the erase; erase not repeatable; finish unguarded | 5.2.16 step 3 + state table |
+| A8-6 | contradictory rotation guards | 3.3.8, 5.3 vault-fsck: "state `erasing`" |
+| A8-7 / B8-5 | rotation discards the 90-day version history | 5.2.16 step 7 `rotation-versions-import`; P41f |
+| A8-8 | no resume before erase; copy step tied to one SSH session | 5.2.16 state-driven `--resume`, re-attach |
+| A8 notes | StartLimit keys in `[Unit]` (verified with systemd-analyze) + selfcheck on unknown keys; reconciliation trigger scope and rule order; open-generation counter; budget writes under the floor mutex; fairness; 100 MB cap | 7.6, 5.2.25, 6.3.5, 5.2.16 step 2, 5.2.7, 5.2.24, 5.2.23 |
+| B8-3 | date neutralizer matches only year-first dates | 15.2.4 any-order dates, month names, slash confusables, combining marks; P11, M4c |
+| B8-4 | thief-added files and `.obsidian/` reach the new phone | 16 steps 7–8 |
+| B8 notes | offline-copy epoch reset at erase; versions-recent by archive time; multi-secret helper + `passwd_tries=1`; P41 wording | 5.2.16 step 3, 5.3, 3.3.7, P41 |
+| C8-1 | implicit chunk budget plans for 20 output tokens; first-sentence decision too strict | 12.2 prefix decision, 8.6.7 implicit budget with defaults/minimum, route label |
+| C8-2 | updated/modified preference drops the event date | 13.4.2 `declared_date` vs `event_date`, 13.4.6 |
+| C8-3 | `files_total` counts Syncthing internals | 14.4, `files-extra` |
+| C8-4 | P6f2 contradicts FTS-only hits | P6f2 |
+| C8-5 | EMBED key change never re-chunks | 13.5.7 |
+| C8-6 | "How much is my rent?" misses the finance guard | 12.2.2 money nouns, P7 |
+| C8 notes | slash confusables; normalized abstention; QUICK restart in swap; published partial flag; swap only after routing | 15.2.4, 12.2, 8.3, 13.6.8 |
