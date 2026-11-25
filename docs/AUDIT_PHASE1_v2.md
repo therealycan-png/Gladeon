@@ -8,8 +8,9 @@ Process (spec §22): three fresh auditors per round (A Linux/reliability, B secu
 | 2 | 2.1 (`SPEC_PHASE1_v2.1.md`) | 54 (17/17/20) | 49 | 49 | 0 | No |
 | 3 | 2.2 (`SPEC_PHASE1_v2.2.md`) | 45 (14/15/16) | 37 | 37 | 0 | No |
 | 4 | 2.3 (`SPEC_PHASE1_v2.3.md`) | 32 (12/6/14) | 29 | 29 | 0 | No |
+| 5 | 2.4 (`SPEC_PHASE1_v2.4.md`) | 17 (4/3/10) | 16 | 16 | 0 | No |
 
-Clean-round streak: **0 / 3**. Current revision under audit: 2.4 (`SPEC_PHASE1_v2.4.md`, self-contained).
+Clean-round streak: **0 / 3**. Current revision under audit: 2.5 (`SPEC_PHASE1_v2.5.md`, self-contained).
 
 ---
 
@@ -260,3 +261,31 @@ Auditors were told to apply the defect bar strictly (router gaps count only when
 | C4-13 | MED | cancel during prompt processing untested | 8.4 batch size, 8.6.1 |
 | C4-14 | MED | `dated` suffix reintroduces future date to the conflict rule | 13.4.6, P11c, M4b |
 | C4 notes | – | fallback vs leak check order; PHP rule; P33 skip; LOADING scope and deep_failed effect; date grammar | 12.2, 15.3, 12.4.3, 8.3, 13.4.2 |
+
+---
+
+## Round 5 (spec rev 2.4 → fixes in rev 2.5)
+
+Auditor A was interrupted by a usage limit and resumed to finish. Duplicate merged: A5-1 = B5-1. All 16 unique findings accepted; fixes tagged `(R5: id)`. The two HIGH findings were both defects introduced by round 4 fixes (rekey design, mount ordering); the ordering cycle was reproduced by the auditor with `systemd-analyze verify`.
+
+| ID | Sev | Finding | Fix in 2.5 |
+|---|---|---|---|
+| A5-1 | HIGH | rekey cannot keep the new keyslots; power cut can lose the vault (= B5-1) | 5.2.16 `--init-only` with all secrets, then `--resume-only`; 5.2.6; P41b |
+| A5-2 | HIGH | privd `Before=` mount creates an ordering cycle at shutdown | 7.5 mount `DefaultDependencies=no`; selfcheck `systemd-analyze verify`; P39 |
+| A5-3 | MED | copy/rekey results not crash-safe | 5.2.15 "running" record; 5.2.16 crash safety |
+| A5-4 | MED | `JOB_IN_PROGRESS` missing from the API | 11.4, P44 |
+| A5 notes | – | divert path; READY=1 timing; read-only verbs bypass lock; tick per boot; fsck runbook | 3.2.5, 7.2, 5.2.7, 5.2.17, 5.3 `vault-fsck` |
+| B5-2 | MED | keyslot check can delete the only working keyslot | 5.2.12, 9.6 code 27, P41c |
+| B5-3 | MED | terminal control characters from notes reach Termux | 15.2.1, 8.6.4, 11.10, P11, M6 |
+| B5 notes | – | initramfs mode; untrusted-clock future dates; PC device ID record; runbook order + version check; lock clears vectors/snapshot; privd floor returned | 3.2.4, 13.4.2, 3.3.7, 16, 9.5.5, 5.2.17 |
+| C5-1 | HIGH | EMBED outage marks all pending chunks failed | 13.4.8, P6e2 |
+| C5-2 | MED | EMBED-down timing undefined; disk-floor case | 13.6.8 `embed_down_since`, P6e, P6i |
+| C5-3 | MED | save/saved, Tagalog enclitics, `pay maya` merge | 12.2.2, 12.1.6, P7 |
+| C5-4 | MED | DEEP not READY in resident mode has no deadline | 8.3, P33b |
+| C5-5 | MED | fallback skipped → abstention for a general question | 12.2 fallback budget, 12.5 "Out of time" |
+| C5-6 | MED | filename future dates in the header title | 13.4.6, P11c |
+| C5-7 | MED | FTS keeps "notes" and `ca`/`wo` stubs | 13.6.1, 12.0.2, P6d |
+| C5-8 | MED | two budgets for QUICK on DEEP | 8.7 |
+| C5-9 | MED | budget derivation has no order/minimum/source | 8.6.7 |
+| C5-10 | MED | untrusted clock uses future dates for ranking | 13.4.2 |
+| C5 notes | – | garbled currency sentence; list-marker definition; rescan timeout; calibration trigger; ₱ unused | 12.4.2–3, 13.3.7, 13.6.7, 12.2.2 |
