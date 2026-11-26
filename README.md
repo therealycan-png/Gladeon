@@ -14,3 +14,4 @@ Build status: see the "Build log" section below.
 | Step (spec §20) | Module | Status |
 |---|---|---|
 | 4 | `gladeon/voice/` tokenizer, normalization, router, tts_text, fixed replies (12.0–12.5) | done, tests P1–P8c, P10–P10c, P12, P13, P19 |
+| 4 / 6 | `gladeon/prompts.py` system prompt, sanitizer, header tag, BRAIN/GENERAL messages, post-filter, leak check, abstention prefix rule (15.1–15.4, 8.6.4, 12.2) | done, tests P6d2, P9, P11, P11b, P45b |
