@@ -16,8 +16,9 @@ Process (spec §22): three fresh auditors per round (A Linux/reliability, B secu
 | 10 | 2.9 (`SPEC_PHASE1_v2.9.md`) | 13 (5/5/3) | 11 | 11 | 0 | No (0 HIGH; 4 of them LOW-impact) |
 | 11 | 2.10 (`SPEC_PHASE1_v2.10.md`) | 14 (4/6/4) | 11 | 11 | 0 | No (0 HIGH) |
 | 12 | 2.11 (`SPEC_PHASE1_v2.11.md`) | 13 (3/4/6) | 11 | 11 | 0 | No (0 HIGH) |
+| 13 | 2.12 (`SPEC_PHASE1_v2.12.md`) | 13 (4/6/3) | 12 | 12 | 0 | No (0 HIGH) |
 
-Clean-round streak: **0 / 3**. Current revision: 2.12 (`SPEC_PHASE1_v2.12.md`, self-contained). Break after round 12 (Shawn's usage at 28%); resume with round 13 on v2.12.
+Clean-round streak: **0 / 3**. Current revision under audit: 2.13 (`SPEC_PHASE1_v2.13.md`, self-contained). Resumed at Shawn's "continue" (usage 33% at the start of round 13).
 
 ---
 
@@ -486,3 +487,29 @@ Fifth consecutive round with zero HIGH findings. Duplicates merged: B12-1 = C12-
 | C12-2 | get-paid exception lets payday questions through | 12.2.2(b); P7 |
 | C12-5 | two rules for an abstaining sticky follow-up | 12.2.3, 12.3.4 |
 | C12-6 | other dot folders reach the phone and break the count | 14.4, 16 step 8 dot-entry `.stignore` |
+
+---
+
+## Round 13 (spec rev 2.12 → fixes in rev 2.13)
+
+Sixth consecutive round with zero HIGH findings. Duplicate merged: B13-1 = C13-1 (the R12 `@@` break altered secrets and made P11 unpassable). All 12 unique findings accepted; fixes tagged `(R13: id)`.
+
+**Design change (editor's decision):** the R12 rule that broke `@@` and `Header tag:` inside note bodies is removed. The header tag is instead **regenerated until it occurs nowhere in the request's untrusted text**, and it is declared only on the line right after the opening marker, so bodies stay fully verbatim and fake declarations cannot match. This also resolves B13-6.
+
+| ID | Finding | Fix in 2.13 |
+|---|---|---|
+| A13-1 | destructive vault tests have no test target and block the install | 5.2.27 privd test mode; 17 header; 3.3.6 |
+| A13-2 | resumable import accepts truncated files | 5.2.16 step 7 temp+fsync+rename, hash-checked skip |
+| A13-3 | import with the vault not mounted counts failures as skipped | 5.2.16 step 7 mounted/id_ok precondition, write error aborts |
+| A13-4 | update-window `close` baseline check cannot fail | 3.3.8 compare with the generation-time baseline; `flush ruleset` |
+| A13 notes | LoadState check before reset-failed; per-file time limit 15 s; P50c wording | 5.2.26, 5.2.20, P50c |
+| B13-1 / C13-1 | `@@` break corrupts secrets, contradicts verbatim, P11 unpassable | 15.2.4 tag chosen absent from untrusted text; P6d2, P11 |
+| B13-2 | dot-entry `.stignore` blocks `.nomedia`; runbook skips 11.11 | 16 step 4, 14.4 |
+| B13-3 | unreadable btime on (b) entries → deleted as `new` | 5.3 `unknown` + btime probe |
+| B13-4 | reused Syncthing temp inode can make thief content `unchanged` | 5.3 size rule → `unknown` |
+| B13-5 | backward `set-time` shifts btime/ctime before `--since` | 5.2.17 correction log; 5.3; 16 step 7 choice of T |
+| B13-6 | variant fake declarations survive | resolved by the 15.2.4 redesign (positional declaration, absent tag) |
+| B13 notes | GUI password handling; show mtime of `unchanged`; rule 3 wording | 14.4, 5.3, 15.3 |
+| C13-2 | sticky fallback re-runs the bare follow-up without context or budget | 12.3.4; P45c |
+| C13-3 | marker-less money questions answered from notes | 12.2 step 5; P7 |
+| C13 notes | M4c wording; rule 3 layout wording; tts drops table delimiter rows | 18, 15.3, 12.4.2 |
