@@ -14,8 +14,9 @@ Process (spec §22): three fresh auditors per round (A Linux/reliability, B secu
 | 8 | 2.7 (`SPEC_PHASE1_v2.7.md`) | 20 (8/6/6) | 16 | 16 | 0 | No (0 HIGH from all three auditors) |
 | 9 | 2.8 (`SPEC_PHASE1_v2.8.md`) | 13 (5/3/5) | 12 | 12 | 0 | No (0 HIGH again) |
 | 10 | 2.9 (`SPEC_PHASE1_v2.9.md`) | 13 (5/5/3) | 11 | 11 | 0 | No (0 HIGH; 4 of them LOW-impact) |
+| 11 | 2.10 (`SPEC_PHASE1_v2.10.md`) | 14 (4/6/4) | 11 | 11 | 0 | No (0 HIGH) |
 
-Clean-round streak: **0 / 3**. Current revision: 2.10 (`SPEC_PHASE1_v2.10.md`, self-contained). Paused after round 10 for Shawn's usage check; resume with round 11 on v2.10.
+Clean-round streak: **0 / 3**. Current revision under audit: 2.11 (`SPEC_PHASE1_v2.11.md`, self-contained). Shawn asked to continue until the gate passes (usage checks on request).
 
 ---
 
@@ -436,3 +437,29 @@ Third consecutive round with **zero HIGH findings**. Duplicates merged: A10-2 = 
 | C10-1 | implicit budget keeps the buffer and skips BRAIN, reversing the 8.7 drop order | 8.6.7, 12.2; M12b spacing |
 | C10-3 | "How much did I lend Mark?" misses the finance guard | 12.2.2(b); P7 |
 | C10 notes | P22/M4c cells; unclosed think in prefix; "get paid" how-to exception | 17, 18, 12.2, 12.2.2; P8 |
+
+---
+
+## Round 11 (spec rev 2.10 → fixes in rev 2.11)
+
+Fourth consecutive round with zero HIGH findings. Duplicates merged: A11-1 = B11-4 (re-hash under the verb lock); B11-6 ⊂ C11-1 (bracket list); B11 note 1 = C11-4 (header working-copy order). All 11 unique findings accepted; fixes tagged `(R11: id)`.
+
+**Design change (editor's decision):** body bracket rewriting (R8–R10) is removed because it corrupted quoted note text (passwords, code). It is replaced by a per-request random **header tag** on real chunk headers; rule 3 trusts only tagged lines, so body text cannot pose as a header whatever characters it uses, and bodies stay verbatim.
+
+| ID | Finding | Fix in 2.11 |
+|---|---|---|
+| A11-1 / B11-4 | stick re-hash holds the verb lock for hours | 5.2.16 step 5 secret-free `gladeon-copy-hash` job outside the lock; P50c |
+| A11-2 | fixed-name transient units never reset-failed | 5.2.26 `reset-failed` + `--collect`; P38d |
+| A11-3 | export/import trust the serial only | 5.2.16 step 2 superblock fingerprint, checked in 5.2.8 |
+| A11-4 | `--without-versions` contradicts the gate; partial imports pass silently | 5.2.16 step 8 |
+| A11 notes | device ID source; dir-fd passing to the helper; install-time setup retry | 3.3.7, 5.2.20, 5.2.11 |
+| B11-1 | pre-theft tag defeated by staggered thinning | 5.3 tagging by inode btime; P46c |
+| B11-2 | "existed before" relies on index rows the thief removes | 5.3 btime rule |
+| B11-3 | create-then-edit escapes as `changed` | 5.3 `new` definition; 16 step 7 |
+| B11-5 | thief-written content printed raw to Termux | 5.3 `versions-export --view`; helper 0600 |
+| B11 notes | dot check on original relpath; one dot-component rule everywhere | 5.3, 5.2.16, 14.4 |
+| C11-1 | bracket rewriting corrupts passwords; still misses `«»`/`<>` | 15.2.4 header tag; rule 3; 8.6.4; P11, P6d2 |
+| C11-2 | we/our, "owe me", get-paid exception too wide | 12.0.7, 12.2.2(f); P7 |
+| C11-3 | personal-route abstention skips the "still reading" checks | 12.2.3; P6c2 |
+| C11-4 | header working-copy order unstated | 13.4.6 ordered steps |
+| C11 notes | M12b buffer wipe; 8.6.7 wording; hard transcript cut | 18, 8.6.7, 8.7 |
