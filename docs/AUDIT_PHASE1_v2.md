@@ -12,8 +12,9 @@ Process (spec §22): three fresh auditors per round (A Linux/reliability, B secu
 | 6 | 2.5 (`SPEC_PHASE1_v2.5.md`) | 21 (5/8/8) | 18 | 18 | 0 | No |
 | 7 | 2.6 (`SPEC_PHASE1_v2.6.md`) | 24 (9/10/5) | 19 | 19 | 0 | No |
 | 8 | 2.7 (`SPEC_PHASE1_v2.7.md`) | 20 (8/6/6) | 16 | 16 | 0 | No (0 HIGH from all three auditors) |
+| 9 | 2.8 (`SPEC_PHASE1_v2.8.md`) | 13 (5/3/5) | 12 | 12 | 0 | No (0 HIGH again) |
 
-Clean-round streak: **0 / 3**. Current revision: 2.8 (`SPEC_PHASE1_v2.8.md`, self-contained). Paused after round 8 for Shawn's usage check (he set a stop at 14% of his weekly limit).
+Clean-round streak: **0 / 3**. Current revision: 2.9 (`SPEC_PHASE1_v2.9.md`, self-contained). Stopped after round 9 at Shawn's usage limit (14% of his weekly limit); resume with round 10 on v2.9.
 
 ---
 
@@ -387,3 +388,27 @@ First round with **zero HIGH findings from all three auditors**. Duplicates merg
 | C8-5 | EMBED key change never re-chunks | 13.5.7 |
 | C8-6 | "How much is my rent?" misses the finance guard | 12.2.2 money nouns, P7 |
 | C8 notes | slash confusables; normalized abstention; QUICK restart in swap; published partial flag; swap only after routing | 15.2.4, 12.2, 8.3, 13.6.8 |
+
+---
+
+## Round 9 (spec rev 2.8 → fixes in rev 2.9)
+
+Second consecutive round with **zero HIGH findings**, and the lowest count so far. Duplicates merged: B9-2 ≈ C9-3 (`.obsidian/` exclusion), B9 note 1 = A9 note 1 (stage purge). All 12 unique findings (all MEDIUM) accepted; fixes tagged `(R9: id)`.
+
+| ID | Finding | Fix in 2.9 |
+|---|---|---|
+| A9-1 | versions import has no passphrase or entry point; finish not gated on it | 5.2.16 steps 7–8, `versions_imported` gate |
+| A9-2 | refused update-window `open` leaves the proxy stopped and the vault open | 3.3.8 restart proxy on refusal; P38b |
+| A9-3 | no source for the Syncthing folder ID after rotation | fixed folder ID `gladeon-notes` (3.3.7, 5.2.16, 14.4) |
+| A9-4 | offline copy of a dirty vault cannot be mounted read-only | 14.3 `last_close_clean` required, code 31; P34b |
+| A9-5 | fairness reservation never expires | 5.2.24 10 s bound; P50 |
+| A9 notes | stage purge; open-generation in copy record and state list; address vault by device path only; adopt rule for vault-setup/erase holders; selfcheck warning scope | 5.2.22, 5.2.15, 5.4, 5.2.8, 6.3.5, 7.6 |
+| B9-1 | bracketed-date neutralizer bypassable (fullwidth/CJK brackets, `_`, no separators, Cyrillic months) | 15.2.4 unconditional bracket replacement with a confusable list; 13.4.6; P11 |
+| B9-2 / C9-3 | `.obsidian/` exclusion undone by compare/export/fill; `files_total` mismatch | 5.2.16 step 5–6, 14.4, `files-extra`, `files_total` exclusions |
+| B9-3 | thief-added lookalike files survive "unrecognized" deletion | 5.3 `new`/`changed` tags + non-ASCII/lookalike flags; 16 step 7 |
+| B9 notes | `sudo -k -S`; config.xml read with O_NOFOLLOW as gladeon-sync | 3.3.7, 5.2.16 step 1 |
+| C9-1 | implicit budget and reserve ignore buffer turns; mid-stream deadline undefined | 8.6.7, 12.2 (actual sizes; `ANSWER_TRUNCATED`) |
+| C9-2 | prefix normalization misses leading whitespace and think blocks | 12.2 prefix rule; P45b |
+| C9-4 | below-one-chunk rule undefined; default on the threshold | 12.2, 8.6.7 (skip = `GENERAL_FALLBACK`; QUICK-on-DEEP default 450) |
+| C9-5 | afford / bayad / get paid miss the finance guard | 12.2.2, P7 |
+| C9 notes | FTS5 phrase syntax; Event date line counted before split; P22 mtime; tokenizer hash | 13.6.1, 13.4.7, P22, 13.5.7 |
