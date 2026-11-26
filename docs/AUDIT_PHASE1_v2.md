@@ -13,8 +13,9 @@ Process (spec §22): three fresh auditors per round (A Linux/reliability, B secu
 | 7 | 2.6 (`SPEC_PHASE1_v2.6.md`) | 24 (9/10/5) | 19 | 19 | 0 | No |
 | 8 | 2.7 (`SPEC_PHASE1_v2.7.md`) | 20 (8/6/6) | 16 | 16 | 0 | No (0 HIGH from all three auditors) |
 | 9 | 2.8 (`SPEC_PHASE1_v2.8.md`) | 13 (5/3/5) | 12 | 12 | 0 | No (0 HIGH again) |
+| 10 | 2.9 (`SPEC_PHASE1_v2.9.md`) | 13 (5/5/3) | 11 | 11 | 0 | No (0 HIGH; 4 of them LOW-impact) |
 
-Clean-round streak: **0 / 3**. Current revision: 2.9 (`SPEC_PHASE1_v2.9.md`, self-contained). Stopped after round 9 at Shawn's usage limit (14% of his weekly limit); resume with round 10 on v2.9.
+Clean-round streak: **0 / 3**. Current revision: 2.10 (`SPEC_PHASE1_v2.10.md`, self-contained). Paused after round 10 for Shawn's usage check; resume with round 11 on v2.10.
 
 ---
 
@@ -412,3 +413,26 @@ Second consecutive round with **zero HIGH findings**, and the lowest count so fa
 | C9-4 | below-one-chunk rule undefined; default on the threshold | 12.2, 8.6.7 (skip = `GENERAL_FALLBACK`; QUICK-on-DEEP default 450) |
 | C9-5 | afford / bayad / get paid miss the finance guard | 12.2.2, P7 |
 | C9 notes | FTS5 phrase syntax; Event date line counted before split; P22 mtime; tokenizer hash | 13.6.1, 13.4.7, P22, 13.5.7 |
+
+---
+
+## Round 10 (spec rev 2.9 → fixes in rev 2.10)
+
+Third consecutive round with **zero HIGH findings**. Duplicates merged: A10-2 = B10-5 (fairness reservation cleared by polling); B10-3 ≈ C10-2 (bracket list → category rule); A10 note 1 ⊂ B10-2. All 11 unique findings accepted (several rated LOW-impact by the auditors, but each breaks a stated rule or test, so they count as defects under 0.2); fixes tagged `(R10: id)`.
+
+| ID | Finding | Fix in 2.10 |
+|---|---|---|
+| A10-1 | `last_close_clean` has no defined writer; clean shutdown would read as dirty | 5.2.10 semantics; P34c |
+| A10-2 / B10-5 | fairness reservation cleared by the proxy's own polls | 5.2.24 per-pid reservation; P50b |
+| A10-3 | `syncthing generate` fails under privd's address-family filter | 3.3.7 transient `gladeon-syncgen` unit |
+| A10-4 | interrupted update-window `open` leaves the proxy stopped | 3.3.8 transient unit, proxy always restarted; P38c |
+| A10-5 | `versions_imported` gate has no way out if the stick fails | 5.2.16 `--finish --without-versions`; skipped entries; P41g |
+| A10 notes | write-ahead open-generation; bind reference copy to image SHA-256 | 5.2.16 steps 2, 5 |
+| B10-1 | thief create-then-delete returns as a "deletion" to restore | 5.3 `pre-theft`/`post-theft` tags; 16 step 7; P46b |
+| B10-2 | `.obsidian/`/`.trash/` still reachable via versions verbs and runbook step 8 | 5.3, 16 step 8; P46b |
+| B10-3 / C10-2 | fixed bracket list always one character short; header working copy references removed rules | 15.2.4 `Ps`/`Pe` category rule; 13.4.6 explicit working copy; P11 |
+| B10-4 | `versions-export` cannot read `new` files | 5.3 (b) IDs stream the current file |
+| B10 notes | confusables source + fallback; delete stage after send | 5.3, 5.2.23 |
+| C10-1 | implicit budget keeps the buffer and skips BRAIN, reversing the 8.7 drop order | 8.6.7, 12.2; M12b spacing |
+| C10-3 | "How much did I lend Mark?" misses the finance guard | 12.2.2(b); P7 |
+| C10 notes | P22/M4c cells; unclosed think in prefix; "get paid" how-to exception | 17, 18, 12.2, 12.2.2; P8 |
