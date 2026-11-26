@@ -18,7 +18,7 @@ Process (spec §22): three fresh auditors per round (A Linux/reliability, B secu
 | 12 | 2.11 (`SPEC_PHASE1_v2.11.md`) | 13 (3/4/6) | 11 | 11 | 0 | No (0 HIGH) |
 | 13 | 2.12 (`SPEC_PHASE1_v2.12.md`) | 13 (4/6/3) | 12 | 12 | 0 | No (0 HIGH) |
 
-Clean-round streak: **0 / 3**. Current revision under audit: 2.13 (`SPEC_PHASE1_v2.13.md`, self-contained). Resumed at Shawn's "continue" (usage 33% at the start of round 13).
+Clean-round streak: **0 / 3**. **Spec frozen at rev 2.13 (`SPEC_PHASE1_v2.13.md`) as the implementation baseline, by Shawn's decision on 2026-11-26 ("do your recommendation").** The 3-clean-rounds gate was **not** met on paper: rounds 8–13 each found 11–16 defects (all MEDIUM/LOW, no HIGH), mostly gaps in the previous round's fixes. Auditing continues on the real code; spec changes from now on are made alongside the code that needs them.
 
 ---
 
