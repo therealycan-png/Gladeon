@@ -15,8 +15,9 @@ Process (spec §22): three fresh auditors per round (A Linux/reliability, B secu
 | 9 | 2.8 (`SPEC_PHASE1_v2.8.md`) | 13 (5/3/5) | 12 | 12 | 0 | No (0 HIGH again) |
 | 10 | 2.9 (`SPEC_PHASE1_v2.9.md`) | 13 (5/5/3) | 11 | 11 | 0 | No (0 HIGH; 4 of them LOW-impact) |
 | 11 | 2.10 (`SPEC_PHASE1_v2.10.md`) | 14 (4/6/4) | 11 | 11 | 0 | No (0 HIGH) |
+| 12 | 2.11 (`SPEC_PHASE1_v2.11.md`) | 13 (3/4/6) | 11 | 11 | 0 | No (0 HIGH) |
 
-Clean-round streak: **0 / 3**. Current revision under audit: 2.11 (`SPEC_PHASE1_v2.11.md`, self-contained). Shawn asked to continue until the gate passes (usage checks on request).
+Clean-round streak: **0 / 3**. Current revision: 2.12 (`SPEC_PHASE1_v2.12.md`, self-contained). Break after round 12 (Shawn's usage at 28%); resume with round 13 on v2.12.
 
 ---
 
@@ -463,3 +464,25 @@ Fourth consecutive round with zero HIGH findings. Duplicates merged: A11-1 = B11
 | C11-3 | personal-route abstention skips the "still reading" checks | 12.2.3; P6c2 |
 | C11-4 | header working-copy order unstated | 13.4.6 ordered steps |
 | C11 notes | M12b buffer wipe; 8.6.7 wording; hard transcript cut | 18, 8.6.7, 8.7 |
+
+---
+
+## Round 12 (spec rev 2.11 → fixes in rev 2.12)
+
+Fifth consecutive round with zero HIGH findings. Duplicates merged: B12-1 = C12-3 (fake tag declaration in a body); B12-4 = C12-4 (stale bracket expectations in P11/M4c). All 11 unique findings accepted; fixes tagged `(R12: id)`.
+
+| ID | Finding | Fix in 2.12 |
+|---|---|---|
+| A12-1 | compare/import hold the verb lock while reading many files | 5.2.16 step 5 `lock_intent` checks between files; P50c |
+| A12-2 | `reset-failed` fails after `--collect` | 5.2.26 ignore "not loaded" |
+| A12-3 | install retry blocked by its own half-finished state | 5.2.11 vault ID recorded last; wipe closes the mapping; P51 |
+| A12 notes | hash range; state-file list; finish skips a completed import | 5.2.16 steps 5, 8; 5.4 |
+| B12-1 / C12-3 | a body can declare a fake header tag | 15.2.4 break every `@@` and `Header tag:` in untrusted text; rule 3; P11, M4c |
+| B12-2 | cleaned first-sentence header field shows a corrupted copy of secrets | 15.3 prompt headers omit the first-sentence field; P6d2 |
+| B12-3 | metadata-only touches tagged `changed` → deletion or rollback | 5.3 `unchanged` tag; 16 step 7; P46c |
+| B12-4 / C12-4 | P11/M4c still expect bracket rewriting | P11, M4c |
+| B12 notes | Syncthing GUI password from `secrets`; `--since` before vault creation refused; rule 3 wording | 14.4, 5.3, 15.3 |
+| C12-1 | Tagalog "owes me" phrasings miss clause (f) | 12.2.2(f); P7 |
+| C12-2 | get-paid exception lets payday questions through | 12.2.2(b); P7 |
+| C12-5 | two rules for an abstaining sticky follow-up | 12.2.3, 12.3.4 |
+| C12-6 | other dot folders reach the phone and break the count | 14.4, 16 step 8 dot-entry `.stignore` |
