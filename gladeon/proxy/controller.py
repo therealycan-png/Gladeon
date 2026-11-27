@@ -79,6 +79,7 @@ class Controller:
             deep_failed=lambda: self.deep_failed_this_boot,
             prepare_deep=self._prepare_deep,
             deep_loadable=lambda: self._deep_loadable(),
+            note_deep=lambda: setattr(self, "last_deep_request", self.clock()),
         ))
         self.deep_failed_this_boot = False
         self.deep_mu = threading.Lock()
@@ -276,13 +277,16 @@ class Controller:
                 M.daily(b, key_change_complete=b.pending_count() == 0)
                 self.snapshot_due = True
             # the snapshot waits for a trusted clock and enough disk, then runs (14.2)
-            if getattr(self, "snapshot_due", False) and self.clock_trusted and not low:
-                self.snapshot_due = False                     # one try per day, even if it fails
+            if (getattr(self, "snapshot_due", False) and self.clock_trusted and not low
+                    and self.clock() >= getattr(self, "snapshot_retry_at", -1e18)):
                 try:
                     M.snapshot(b, os.path.join(self.cfg.vault_root, "backups"), True, int(self.wall()))
+                    self.snapshot_due = False
+                    self.warnings.discard("SNAPSHOT_FAILED")
                 except Exception as e:
                     log.error("snapshot failed %s", type(e).__name__)
                     self.warnings.add("SNAPSHOT_FAILED")
+                    self.snapshot_retry_at = self.clock() + 3600       # retry hourly until it works
 
     # ---- search hooks for the pipeline -----------------------------------------------------
     def _search(self, text: str, floor_name: str):
@@ -449,24 +453,31 @@ class Controller:
         return (self.s.engines.get("deep") != "READY" and not self.deep_failed_this_boot
                 and self.cfg.deep_plan != "unavailable")
 
-    def _prepare_deep(self) -> Optional[float]:
-        """Runs with no pipeline lock and no request state held. Returns when the engine that will
-        answer (DEEP, or QUICK after a failed load) is READY, as a monotonic time."""
+    def _prepare_deep(self) -> float:
+        """Runs with no pipeline lock and no request state held. Returns (monotonic time) when the
+        engine that will answer (DEEP, or QUICK after a failed load) is READY."""
         self.last_deep_request = self.clock()
         early = getattr(self._early, "fn", None)
-        if early is not None and self._deep_loadable():
-            early(R.deep_loading(int(self.cfg.load_seconds.get("deep", 60.0))))   # 202 for every waiter
-        with self.deep_mu:                                    # one load at a time; others wait for it
+        notice = R.deep_loading(int(self.cfg.load_seconds.get("deep", 60.0)))
+        if not self.deep_mu.acquire(blocking=False):          # another request is loading: say so, wait
+            if early is not None:
+                early(notice)
+            self.deep_mu.acquire()
+        try:
             if self.s.engines.get("deep") == "READY" or not self._deep_loadable():
                 return self.clock()                           # a load just finished (or just failed)
+            if early is not None:
+                early(notice)                                 # 202 with the loading reply
             return self._load_deep()
+        finally:
+            self.deep_mu.release()
 
-    def _load_deep(self) -> Optional[float]:
+    def _load_deep(self) -> float:
         if self.cfg.deep_plan == "swap" and self.s.engines.get("quick") == "READY":
-            with self.pipeline.lock:                          # 12.3.5: wipe the follow-up on a DEEP swap
-                self.pipeline._reset_followup()
+            with self.pipeline.lock:                          # 12.3.5: wipe the follow-up on a DEEP swap,
+                self.set_engine("quick", "STOPPED")           # and mark QUICK gone in the same step so no
+                self.pipeline._reset_followup()               # request can start on it in between
             self.privd.call("unit-stop", {"unit": "llm-quick"})
-            self.set_engine("quick", "STOPPED")
         self.set_engine("deep", "LOADING")
         self.privd.call("unit-start", {"unit": "llm-deep"})
         if self.wait_engine("deep", 2 * self.cfg.load_seconds.get("deep", 60.0)):

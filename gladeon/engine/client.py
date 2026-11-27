@@ -292,23 +292,22 @@ class _Stream:
 
     def lines(self, chunked: bool, length: Optional[int] = None):
         if not chunked and length is not None:       # a plain body: exactly Content-Length bytes
-            left = length
+            left, scanned = length, 0
             while left > 0:
-                while b"\n" not in self.buf[:left]:
-                    if len(self.buf) >= left:
-                        break
-                    if len(self.buf) > self.MAX_LINE:
+                cut = self.buf.find(b"\n", scanned, min(left, len(self.buf)))
+                if cut < 0 and len(self.buf) < left:
+                    scanned = len(self.buf)               # only new bytes are searched next time
+                    if scanned > self.MAX_LINE:
                         raise EngineError("line too long")
-                    if not self._fill():             # early EOF: hand over what arrived
+                    if not self._fill():                  # early EOF: hand over what arrived
                         if self.buf:
                             out, self.buf = self.buf[:left], b""
                             yield out
                         return
-                seg = self.buf[:left]
-                cut = seg.find(b"\n")
-                n = cut + 1 if cut >= 0 else len(seg)
+                    continue
+                n = cut + 1 if cut >= 0 else left
                 out, self.buf = self.buf[:n], self.buf[n:]
-                left -= n
+                left, scanned = left - n, 0
                 yield out
             return
         if not chunked:
@@ -333,12 +332,14 @@ class _Stream:
                 if body:
                     yield body
                 return
-            if size > self.MAX_LINE:
-                raise EngineError("chunk too large")
-            body += self._exact(size)
+            remaining = size                 # big chunks are read in bounded slices
+            while remaining:
+                piece = self._exact(min(remaining, 65536))
+                remaining -= len(piece)
+                body += piece
+                while b"\n" in body:
+                    ln, body = body.split(b"\n", 1)
+                    yield ln + b"\n"
+                if len(body) > self.MAX_LINE:
+                    raise EngineError("line too long")
             self._exact(2)                   # CRLF after each chunk
-            while b"\n" in body:
-                ln, body = body.split(b"\n", 1)
-                yield ln + b"\n"
-            if len(body) > self.MAX_LINE:
-                raise EngineError("line too long")

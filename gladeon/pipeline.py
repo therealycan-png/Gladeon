@@ -61,9 +61,10 @@ class Deps:
     deep_failed: Callable[[], bool] = lambda: False
     # Called once routing knows a DEEP request needs a chat engine (8.3). Returns the monotonic time
     # the engine that will answer became READY (the deadline counts from max(start, that)), or None.
-    prepare_deep: Callable[[], Optional[float]] = lambda: None
+    prepare_deep: Callable[[], float] = lambda: 0.0
     # True when DEEP is not READY but a load may be attempted (plan allows, not failed this boot)
     deep_loadable: Callable[[], bool] = lambda: False
+    note_deep: Callable[[], None] = lambda: None     # every DEEP-mode request that reaches an engine
     pronunciation: str = "Glad-eon"
     clock: Callable[[], float] = time.monotonic
 
@@ -137,7 +138,9 @@ class Pipeline:
         start = self.d.clock() if start is None else start
         ready_at = None
         for attempt in (1, 2):
-            if not self.lock.acquire(timeout=BUSY_WAIT_S):
+            # the re-run was already promised an answer (202): wait up to its deadline, not 5 s
+            wait = BUSY_WAIT_S if attempt == 1 else max(BUSY_WAIT_S, ready_at + DEADLINE_S["deep"] - self.d.clock())
+            if not self.lock.acquire(timeout=wait):
                 raise Busy()
             try:
                 out = self._handle(transcript, body_mode, start, ready_at, allow_load=attempt == 1)
@@ -149,8 +152,6 @@ class Pipeline:
             # no follow-up, no note text) and no pipeline lock, then re-run the request from
             # scratch: routing is deterministic, so a lock or new note during the load is honored.
             ready_at = self.d.prepare_deep()
-            if ready_at is None:
-                ready_at = self.d.clock()
         raise EngineLoading()
 
     def _handle(self, transcript: str, body_mode: str, start: float, ready_at: Optional[float] = None,
@@ -172,11 +173,12 @@ class Pipeline:
         if cut:
             warnings.append("TRANSCRIPT_TRUNCATED")
         deadline = start + DEADLINE_S[mode]
-        fu = self.followup if self.followup.active(self.d.clock()) else None
+        # follow-up activity is judged at request start, so a re-run after a DEEP load decides the same
+        fu = self.followup if self.followup.active(start) else None
         if fu is None and self.followup.route is not None:
             self.wipe()
         rr = RT.route(text, search_text, self.d.vault_ready(), search_ids,
-                      self.d.partial_transient, fu, self.d.clock())
+                      self.d.partial_transient, fu, start)
         r = rr.route
         if r == RT.LOCAL_COMMAND:
             return self._fixed(r, mode, self.d.command(rr.command), warnings)
@@ -191,6 +193,8 @@ class Pipeline:
         if r == RT.STILL_READING:
             return self._fixed(r, mode, R.still_reading(self.d.still_reading_n()), warnings)
 
+        if mode == "deep":
+            self.d.note_deep()                         # keeps DEEP loaded while it is in use (8.3)
         if mode == "deep" and allow_load and self.d.deep_loadable():
             return _NEEDS_DEEP                        # drops hits_map; handle() loads, then re-runs
         sticky = fu is not None and rr.route == fu.route

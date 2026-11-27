@@ -169,6 +169,7 @@ class ControllerTest(unittest.TestCase):
         self.assertTrue(self.ctl.status()["index"]["calibrated"])
         self.assertNotIn("INDEX_UNCALIBRATED", self.ctl.status()["warnings"])
         self.assertEqual(len(os.listdir(os.path.join(self.vault, "backups"))), 1)
+        self.assertNotIn("SNAPSHOT_FAILED", self.ctl.status()["warnings"])
 
     def test_clock_trust_and_correction(self):
         floor = int(time.time()) + 3600                         # RTC is an hour behind privd's floor

@@ -134,6 +134,37 @@ class DeepTest(tc.ControllerTest):
             self.assertTrue(o["display_text"].startswith(R.DEEP_UNAVAILABLE_PREFIX), o["display_text"])
         self.assertEqual(self.units.count(("start", "llm-deep")), 1)
 
+    def test_deep_in_use_is_not_unloaded(self):
+        self.llama.replies += [(["One."], 0), (["Two."], 0)]
+        self.ctl.run_query("think harder what is rice", "auto", None)       # loads DEEP
+        self.ctl.last_deep_request = -1e18
+        self.ctl.run_query("think harder what is corn", "auto", None)       # DEEP already READY
+        self.ctl.cfg.deep_idle_s = 60
+        self.ctl.deep_idle_tick()
+        self.assertEqual(self.ctl.s.engines["deep"], "READY")
+
+    def test_second_waiter_not_busy_behind_long_answer(self):
+        import gladeon.pipeline as P
+        P.BUSY_WAIT_S = 0.2
+        try:
+            self.llama.replies += [(["Long"] + [" answer"] * 10 + ["."], 0.08), (["Short."], 0)]
+            outs, errs = [], []
+
+            def ask():
+                try:
+                    outs.append(self.ctl.run_query("think harder what is rice", "auto", None))
+                except Exception as e:
+                    errs.append(type(e).__name__)
+            ts = [threading.Thread(target=ask) for _ in range(2)]
+            for t in ts:
+                t.start()
+            for t in ts:
+                t.join(15)
+            self.assertEqual(errs, [])
+            self.assertEqual(len(outs), 2)
+        finally:
+            P.BUSY_WAIT_S = 5.0
+
     def test_processing_reply_with_partial_load_seconds(self):
         self.ctl.cfg.load_seconds = {"quick": 45}
         self.assertEqual(self.ctl.processing_reply()["retry_window_s"], int(2 * 60 + 200 + 10))

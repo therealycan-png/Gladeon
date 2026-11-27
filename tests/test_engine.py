@@ -90,6 +90,14 @@ class EngineTest(unittest.TestCase):
         self.assertRaises(EngineError, e.chat, [], ChatParams("QUICK"), self.dl(5))
         self.assertLess(time.monotonic() - t0, 1.5)
 
+    def test_large_chunk_of_short_lines_ok(self):
+        ev = b'data: {"choices":[{"delta":{"content":"x"}}]}\n\n'
+        big = ev * 30000 + b"data: [DONE]\n\n"                       # ~1.4 MB in one chunk
+        e = self._raw_server(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n" +
+                             f"{len(big):x}\r\n".encode() + big + b"\r\n0\r\n\r\n")
+        r = e.chat([], ChatParams("QUICK"), self.dl(10))
+        self.assertEqual(len(r.text), 30000)
+
     def test_auth_required(self):
         bad = Engine("quick", "wrong", port=self.f.port)
         self.assertRaises(EngineError, bad.chat, [], ChatParams("QUICK"), self.dl())

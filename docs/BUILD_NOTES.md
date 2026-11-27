@@ -84,3 +84,14 @@ Round 3 found 8 more problems, nearly all in the DEEP-load concurrency added in 
 **Replaced with a simpler design.** A DEEP request that needs the engine loaded now gives up everything it holds (hits, follow-up, note text), releases the lock, waits for the load, and then **re-runs from scratch**. Routing is deterministic, so the re-run is correct. A lock during the load is honored naturally (the re-run sees a locked vault and answers "Vault is locked."), and no note text is held across the wait. A test now asserts that the password never reaches the engine when the vault is locked mid-load.
 
 Also fixed in this round: Content-Length bodies are read line by line, with partial data kept on early EOF; chunk sizes are bounded before buffering; a failing snapshot is tried once a day with a `SNAPSHOT_FAILED` warning; and every DEEP waiter gets the loading notice.
+
+## Code review, round 4 (on the redesign)
+
+Round 4 found 9 issues. **None of them were note-text or security leaks** (rounds 1–3 had those), which suggests the redesign converged. They were liveness and edge cases, all fixed with tests: DEEP was unloaded while still in use; a promised re-run could end in BUSY behind a long answer; the follow-up decision changed across a long load; the swap's follow-up wipe could be undone in a small window; `SNAPSHOT_FAILED` never cleared and a failed snapshot waited a day (now retried hourly); the loading notice could be stale; a big chunk of many short lines was refused; and the Content-Length scan was O(n²).
+
+| Round | Scope | Findings | Leaks of note text |
+|---|---|---|---|
+| 1 | whole build (brain onward) | 10 | 1 (hits kept after lock) |
+| 2 | round-1 fixes | 7 | 1 (hits lost or kept across DEEP wait) |
+| 3 | round-2 fixes | 8 | 1 (note text after lock during DEEP load) → redesign |
+| 4 | redesign | 9 | 0 |
