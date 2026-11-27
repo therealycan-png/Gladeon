@@ -2,7 +2,8 @@
 # Unlock the vault. The passphrase is read without echo and sent on stdin, never in argv.
 . "$(dirname "$(readlink -f "$0")")/gladeon-lib.sh"
 IFS= read -rs -p "Vault passphrase: " pw; echo
-gl_request POST /vault/unlock < <(jq -cn --arg p "$pw" '{passphrase:$p}')
+# printf is a shell builtin, so the passphrase never appears in any process's argv (9.2)
+gl_request POST /vault/unlock < <(printf '%s' "$pw" | jq -Rsc '{passphrase: .}')
 unset pw
 case "$GL_CODE" in
   202) echo "Unlocking." ;;

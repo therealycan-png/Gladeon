@@ -110,7 +110,8 @@ class Controller:
                 return 409, {"schema": SCHEMA, "error": "CONFLICT"}
             self.s.vault = "UNLOCKING"
             self.lock_requested = False
-        secret = passphrase.encode()
+        import unicodedata
+        secret = unicodedata.normalize("NFC", passphrase).encode("utf-8")      # 9.2 canonical form
         threading.Thread(target=self._unlock_job, args=(secret,), name="unlock", daemon=True).start()
         return 202, {"schema": SCHEMA, "state": "VAULT_UNLOCKING"}
 
