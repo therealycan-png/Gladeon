@@ -145,6 +145,7 @@ class DeepTest(tc.ControllerTest):
 
     def test_second_waiter_not_busy_behind_long_answer(self):
         import gladeon.pipeline as P
+        old = P.BUSY_WAIT_S
         P.BUSY_WAIT_S = 0.2
         try:
             self.llama.replies += [(["Long"] + [" answer"] * 10 + ["."], 0.08), (["Short."], 0)]
@@ -162,8 +163,35 @@ class DeepTest(tc.ControllerTest):
                 t.join(15)
             self.assertEqual(errs, [])
             self.assertEqual(len(outs), 2)
+            for o in outs:
+                self.assertNotEqual(o["display_text"], R.OUT_OF_TIME[0])   # re-run deadline from lock time
         finally:
-            P.BUSY_WAIT_S = 5.0
+            P.BUSY_WAIT_S = old
+
+    def test_idle_unload_waits_for_running_request(self):
+        self.llama.replies.append((["One."], 0))
+        self.ctl.run_query("think harder what is rice", "auto", None)
+        self.ctl.cfg.deep_idle_s = 0
+        self.ctl.last_deep_request = -1e18
+        with self.ctl.pipeline.lock:                       # a request is running
+            self.ctl.deep_idle_tick()
+            self.assertEqual(self.ctl.s.engines["deep"], "READY")
+        self.ctl.deep_idle_tick()
+        self.assertEqual(self.ctl.s.engines["deep"], "STOPPED")
+
+    def test_rerun_ignores_followup_changed_during_load(self):
+        p = self.ctl.pipeline
+        p.followup.route, p.followup.turns, p.followup.last_reply = "GENERAL_CHAT", [("q", "a")], time.monotonic()
+        gen = p.fu_gen
+        p.fu_gen += 1                                      # another request changed it meanwhile
+        with p.lock:
+            self.llama.replies.append((["Fine."], 0))
+            self.ctl.set_engine("deep", "READY")
+            out = p._handle("think harder what about rice", "auto", time.monotonic(), time.monotonic(),
+                            allow_load=False, fu_gen=gen)
+        sent = self.llama.requests[-1][1]["messages"]
+        self.assertFalse(any(m["content"] == "q" for m in sent))   # the other turns were not used
+        self.assertEqual(p.followup.turns[-1][0], "think harder what about rice".replace("think harder ", ""))
 
     def test_processing_reply_with_partial_load_seconds(self):
         self.ctl.cfg.load_seconds = {"quick": 45}

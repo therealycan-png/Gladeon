@@ -95,3 +95,6 @@ Round 4 found 9 issues. **None of them were note-text or security leaks** (round
 | 2 | round-1 fixes | 7 | 1 (hits lost or kept across DEEP wait) |
 | 3 | round-2 fixes | 8 | 1 (note text after lock during DEEP load) → redesign |
 | 4 | redesign | 9 | 0 |
+| 5 | round-4 fixes | 8 (2 important, both only with two DEEP requests at once, which the phone's one-command rule prevents) | 0 |
+
+Round 5 fixes: a promised re-run now goes ahead of new requests (a condition-variable handoff) and its deadline counts from when it gets the lock (a small, deliberate change from 8.6.3's "from DEEP READY", so a queued DEEP request is never answered "Out of time"); the idle unload checks and switches while holding the pipeline lock; a re-run ignores a follow-up that another request changed during the load (generation counter); the loading notice is sent only when a load is running; and Content-Length lines are capped.

@@ -459,9 +459,9 @@ class Controller:
         self.last_deep_request = self.clock()
         early = getattr(self._early, "fn", None)
         notice = R.deep_loading(int(self.cfg.load_seconds.get("deep", 60.0)))
-        if not self.deep_mu.acquire(blocking=False):          # another request is loading: say so, wait
-            if early is not None:
-                early(notice)
+        if not self.deep_mu.acquire(blocking=False):          # another request holds the load lock
+            if early is not None and self.s.engines.get("deep") == "LOADING":
+                early(notice)                                 # only when a load is really running
             self.deep_mu.acquire()
         try:
             if self.s.engines.get("deep") == "READY" or not self._deep_loadable():
@@ -493,13 +493,22 @@ class Controller:
         return self.clock()
 
     def deep_idle_tick(self) -> None:
-        """Swap mode: DEEP stays loaded until 10 min without DEEP requests, then QUICK returns."""
-        if (self.cfg.deep_plan == "swap" and self.s.engines.get("deep") == "READY" and self.inflight == 0
-                and self.clock() - self.last_deep_request >= self.cfg.deep_idle_s):
+        """Swap mode: DEEP stays loaded until 10 min without DEEP requests, then QUICK returns.
+        Checked and switched while holding the pipeline lock, so no request can start on DEEP meanwhile."""
+        if self.cfg.deep_plan != "swap" or self.s.engines.get("deep") != "READY":
+            return
+        if not self.pipeline.lock.acquire(blocking=False):
+            return                                            # a request is running: not idle
+        try:
+            with self.mu:
+                if self.inflight or self.clock() - self.last_deep_request < self.cfg.deep_idle_s:
+                    return
+                self.set_engine("deep", "STOPPED")
             self.pipeline.wipe()
-            self.privd.call("unit-stop", {"unit": "llm-deep"})
-            self.set_engine("deep", "STOPPED")
-            self.privd.call("unit-start", {"unit": "llm-quick"})
+        finally:
+            self.pipeline.lock.release()
+        self.privd.call("unit-stop", {"unit": "llm-deep"})
+        self.privd.call("unit-start", {"unit": "llm-quick"})
 
     def engine_restart(self, engine: str) -> tuple[int, dict]:
         if engine == "deep":

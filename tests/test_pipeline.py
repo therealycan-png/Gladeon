@@ -122,6 +122,7 @@ class PipelineTest(unittest.TestCase):
         import threading
         import gladeon.pipeline as P
         from gladeon.pipeline import Busy
+        old = P.BUSY_WAIT_S
         P.BUSY_WAIT_S = 0.2
         try:
             self.f.replies.append((["slow."] * 10, 0.1))
@@ -132,7 +133,7 @@ class PipelineTest(unittest.TestCase):
                 self.p.handle("hello")
             t.join()
         finally:
-            P.BUSY_WAIT_S = 5.0
+            P.BUSY_WAIT_S = old
 
     def test_mid_stream_deadline(self):
         self.f.replies.append((["First sentence.", " Second", " part"] + [" more"] * 40, 0.05))

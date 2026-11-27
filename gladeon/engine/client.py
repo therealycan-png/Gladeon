@@ -306,6 +306,8 @@ class _Stream:
                         return
                     continue
                 n = cut + 1 if cut >= 0 else left
+                if n > self.MAX_LINE:
+                    raise EngineError("line too long")
                 out, self.buf = self.buf[:n], self.buf[n:]
                 left, scanned = left - n, 0
                 yield out

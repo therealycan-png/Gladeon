@@ -84,6 +84,9 @@ class Pipeline:
         self.d = deps
         self.followup = RT.FollowUp()
         self._fu_hits: dict = {}       # hits behind followup.chunk_ids, kept only as long as the follow-up
+        self.fu_gen = 0                # bumped on every follow-up change
+        self._promised = 0             # re-runs waiting for the lock after a DEEP load
+        self._cv = threading.Condition()
         # a request's own hits live in a local dict passed down the call chain, never on self, so a
         # request that runs while another waits for DEEP cannot clobber them (review round 2)
         self.lock = threading.Lock()   # one conversation; the proxy serializes chat anyway
@@ -96,12 +99,14 @@ class Pipeline:
     def _reset_followup(self) -> None:
         self.followup.wipe()
         self._fu_hits = {}
+        self.fu_gen += 1
 
     def _fixed(self, route: str, mode: str, pair, warnings=(), keep_route: Optional[str] = None) -> Reply:
         if keep_route == RT.FINANCE_DEFERRED:
             self.followup.route, self.followup.turns = RT.FINANCE_DEFERRED, []
             self.followup.last_reply = self.d.clock()
             self._fu_hits = {}
+            self.fu_gen += 1
         else:
             self.wipe()
         return Reply(route, mode, pair[0], pair[1], list(warnings))
@@ -136,14 +141,29 @@ class Pipeline:
     def handle(self, transcript: str, body_mode: str = "auto", start: Optional[float] = None) -> Reply:
         """One conversation at a time; a second request waits at most 5 s, then BUSY (8.5)."""
         start = self.d.clock() if start is None else start
-        ready_at = None
+        ready_at, gen = None, None
         for attempt in (1, 2):
-            # the re-run was already promised an answer (202): wait up to its deadline, not 5 s
-            wait = BUSY_WAIT_S if attempt == 1 else max(BUSY_WAIT_S, ready_at + DEADLINE_S["deep"] - self.d.clock())
-            if not self.lock.acquire(timeout=wait):
-                raise Busy()
+            if attempt == 1:
+                if not self._acquire_first(BUSY_WAIT_S):
+                    raise Busy()
+            else:
+                # the re-run was already promised an answer (202): it goes ahead of new requests,
+                # and its deadline counts from when it gets the lock
+                with self._cv:
+                    self._promised += 1
+                try:
+                    if not self.lock.acquire(timeout=DEADLINE_S["deep"]):
+                        raise Busy()
+                finally:
+                    with self._cv:
+                        self._promised -= 1
+                        self._cv.notify_all()
+                ready_at = max(ready_at, self.d.clock())
             try:
-                out = self._handle(transcript, body_mode, start, ready_at, allow_load=attempt == 1)
+                if attempt == 1:
+                    gen = self.fu_gen
+                out = self._handle(transcript, body_mode, start, ready_at, allow_load=attempt == 1,
+                                   fu_gen=None if attempt == 1 else gen)
             finally:
                 self.lock.release()
             if out is not _NEEDS_DEEP:
@@ -154,8 +174,19 @@ class Pipeline:
             ready_at = self.d.prepare_deep()
         raise EngineLoading()
 
+    def _acquire_first(self, timeout: float) -> bool:
+        """New requests wait while a promised re-run is queued, then take the lock (<= timeout)."""
+        end = self.d.clock() + timeout
+        with self._cv:
+            while self._promised:
+                left = end - self.d.clock()
+                if left <= 0 or not self._cv.wait(left):
+                    if self._promised:
+                        return False
+        return self.lock.acquire(timeout=max(0.0, end - self.d.clock()))
+
     def _handle(self, transcript: str, body_mode: str, start: float, ready_at: Optional[float] = None,
-                allow_load: bool = True):
+                allow_load: bool = True, fu_gen: Optional[int] = None):
         warnings: list = []
         hits_map: dict = dict(self._fu_hits)      # this request only; follow-up hits carried explicitly
 
@@ -173,9 +204,12 @@ class Pipeline:
         if cut:
             warnings.append("TRANSCRIPT_TRUNCATED")
         deadline = start + DEADLINE_S[mode]
-        # follow-up activity is judged at request start, so a re-run after a DEEP load decides the same
+        # follow-up activity is judged at request start; on a re-run after a DEEP load the follow-up
+        # counts only if no other request changed it meanwhile (generation check)
         fu = self.followup if self.followup.active(start) else None
-        if fu is None and self.followup.route is not None:
+        if fu_gen is not None and fu_gen != self.fu_gen:
+            fu = None
+        if fu is None and self.followup.route is not None and fu_gen is None:
             self.wipe()
         rr = RT.route(text, search_text, self.d.vault_ready(), search_ids,
                       self.d.partial_transient, fu, start)
@@ -290,6 +324,7 @@ class Pipeline:
             self._reset_followup()          # keeps this request's hits
             fu.route = store_route
         fu.turns = (fu.turns + [(question, text)])[-2:]
+        self.fu_gen += 1
         fu.question = question
         fu.last_reply = self.d.clock()
         if store_route != RT.BRAIN_RAG:

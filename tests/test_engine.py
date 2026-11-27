@@ -98,6 +98,16 @@ class EngineTest(unittest.TestCase):
         r = e.chat([], ChatParams("QUICK"), self.dl(10))
         self.assertEqual(len(r.text), 30000)
 
+    def test_content_length_long_line_rejected(self):
+        import gladeon.engine.client as C
+        old = C._Stream.MAX_LINE
+        C._Stream.MAX_LINE = 1000
+        try:
+            e = self._raw_server(b"HTTP/1.1 200 OK\r\nContent-Length: 5000\r\n\r\n" + b"x" * 5000)
+            self.assertRaises(EngineError, e.chat, [], ChatParams("QUICK"), self.dl(5))
+        finally:
+            C._Stream.MAX_LINE = old
+
     def test_auth_required(self):
         bad = Engine("quick", "wrong", port=self.f.port)
         self.assertRaises(EngineError, bad.chat, [], ChatParams("QUICK"), self.dl())
