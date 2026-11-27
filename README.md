@@ -15,4 +15,4 @@ Build status: see the "Build log" section below.
 |---|---|---|
 | 4 | `gladeon/voice/` tokenizer, normalization, router, tts_text, fixed replies (12.0–12.5) | done, tests P1–P8c, P10–P10c, P12, P13, P19 |
 | 4 / 6 | `gladeon/prompts.py` system prompt, sanitizer, header tag, BRAIN/GENERAL messages, post-filter, leak check, abstention prefix rule (15.1–15.4, 8.6.4, 12.2) | done, tests P6d2, P9, P11, P11b, P45b |
-| 5 | `gladeon/brain/` chunker, FTS terms, brain.db schema and writer, int8 vectors, hybrid search, watcher (13.1–13.6) | done, tests P6d, P11c, P11d, P20, P21, P22, P26, P27; calibration math and EMBED client pending |
+| 5 | `gladeon/brain/` chunker, FTS terms, brain.db schema and writer, int8 vectors, hybrid search, watcher (13.1–13.6) | done, tests P6d, P11c, P11d, P20, P21, P22, P26, P27; calibration floors and partial flags (13.6.7–13.6.8) in `brain/calibrate.py`; EMBED client pending |
