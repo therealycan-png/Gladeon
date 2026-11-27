@@ -64,6 +64,10 @@ def main(argv=None) -> int:
                      PrivdClient(conf.get("privd_socket", "/run/gladeon/privd.sock")), engines, cache)
     srv = Server(conf.get("listen", "0.0.0.0"), int(conf.get("port", 8443)),
                  tls_context(conf["cert"], conf["key"]), token, phone_ips, App(ctl, cache))
+    from .. import preflight as PF
+    ips = conf.get("pc_ips", {})
+    ctl.preflight_fn = lambda: PF.run_all(conf["cert"], [ips.get("eth", ""), ips.get("wlan", "")],
+                                          profiles["quick"].control_tokens, [], 0, int(time.time()))
     srv.start()
     hygiene.sd_notify("READY=1")                     # listener first (7.1.3)
     live = hygiene.Liveness()

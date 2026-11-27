@@ -556,8 +556,13 @@ class Controller:
             return 503, {"schema": SCHEMA, "error": r.name or "BUSY"}
         return 202, {"schema": SCHEMA}
 
+    preflight_fn: Callable[[], list] = staticmethod(lambda: [])
+
     def preflight(self) -> list:
-        return []
+        try:
+            return self.preflight_fn()
+        except Exception as e:
+            return [{"id": "PREFLIGHT", "status": "FAIL", "detail": type(e).__name__}]
 
     # ---- /status (11.5) --------------------------------------------------------------------
     def status(self) -> dict:
