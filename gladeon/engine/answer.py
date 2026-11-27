@@ -18,6 +18,7 @@ class Answer:
     attempts: int
     timed_out: bool = False
     error: Optional[str] = None
+    partial: str = ""          # post-filtered text received before the deadline
 
 
 def answer(engine: Engine, messages: list[dict], params: ChatParams, deadline: float,
@@ -31,8 +32,8 @@ def answer(engine: Engine, messages: list[dict], params: ChatParams, deadline: f
         p = ChatParams(**{**params.__dict__, "temperature_bump": bump})
         try:
             r = engine.chat(messages, p, deadline, cancel, on_text)
-        except DeadlineExceeded:
-            return Answer("", attempts, timed_out=True)
+        except DeadlineExceeded as e:
+            return Answer("", attempts, timed_out=True, partial=post_filter(e.partial, control_tokens, tag or ""))
         except Cancelled:
             return Answer("", attempts, error="CANCELLED")
         except EngineError as e:

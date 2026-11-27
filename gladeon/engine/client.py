@@ -21,7 +21,9 @@ class EngineError(Exception):
 
 
 class DeadlineExceeded(EngineError):
-    pass
+    def __init__(self, where: str, partial: str = ""):
+        super().__init__(where)
+        self.partial = partial
 
 
 class Cancelled(EngineError):
@@ -179,7 +181,7 @@ class Engine:
                     raise Cancelled("chat")
                 left = deadline - self.clock()
                 if left <= 0:
-                    raise DeadlineExceeded("chat")
+                    raise DeadlineExceeded("chat", "".join(parts))
                 if c.sock is not None:
                     c.sock.settimeout(max(0.05, min(READ_LOOP_S, left)))
                 try:

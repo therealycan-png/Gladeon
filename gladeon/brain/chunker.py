@@ -312,6 +312,17 @@ def _units(block_kind: str, text: str, budget: int, count) -> list[str]:
     return out
 
 
+def make_header(rank_date: str, title: str, crumb: str, lead: str) -> str:
+    """Always four fields, so the breadcrumb can be read back unambiguously (fields hold no `|`)."""
+    return f"[{rank_date} | {title} | {crumb} | {lead}]"
+
+
+def header_fields(header: str) -> list[str]:
+    inner = header.strip()
+    inner = inner[1:-1] if inner.startswith("[") and inner.endswith("]") else inner
+    return [p.strip() for p in inner.split("|")]
+
+
 def chunk_note(relpath: str, raw_text: str, mtime_date: str, cap: str,
                count_tokens: Callable[[str], int] = approx_tokens,
                limit: int = MAX_CHUNK_TOKENS, embed_seq: int = 512) -> tuple[NoteMeta, list[Chunk]]:
@@ -328,7 +339,7 @@ def chunk_note(relpath: str, raw_text: str, mtime_date: str, cap: str,
             continue
         crumb = " > ".join(clean_field(c) for c in crumbs)
         lead = clean_field(first_sentence(sec))
-        header = f"[{meta.rank_date} | {title}" + (f" | {crumb}" if crumb else "") + (f" | {lead}" if lead else "") + "]"
+        header = make_header(meta.rank_date, title, crumb, lead)
         if event_pending:
             sec = f"Event date: {meta.event_date}.\n\n" + sec
             event_pending = False
@@ -349,7 +360,7 @@ def chunk_note(relpath: str, raw_text: str, mtime_date: str, cap: str,
         if cur:
             chunks.append(Chunk(len(chunks), header, "\n\n".join(cur), title, crumb, 0))
     if event_pending:   # a note with no body text still records its event date
-        header = f"[{meta.rank_date} | {title}]"
+        header = make_header(meta.rank_date, title, "", "")
         chunks.append(Chunk(0, header, f"Event date: {meta.event_date}.", title, "", 0))
     for c in chunks:
         c.token_count = count_tokens(c.header + "\n" + c.body)
