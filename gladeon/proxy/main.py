@@ -58,7 +58,9 @@ def main(argv=None) -> int:
     ctl = Controller(Config(vault_root=conf.get("vault_root", "/srv/gladeon/vault"),
                             state_dir=conf.get("state_dir", "/var/lib/gladeon"),
                             run_dir=conf.get("run_dir", "/run/gladeon-proxy"),
-                            emb_key=conf.get("emb_key", "embed@0@0@0"), profiles=profiles),
+                            emb_key=conf.get("emb_key", "embed@0@0@0"), profiles=profiles,
+                            deep_plan=conf.get("deep_plan", "unavailable"),
+                            load_seconds=conf.get("load_seconds", {"quick": 60.0, "deep": 60.0})),
                      PrivdClient(conf.get("privd_socket", "/run/gladeon/privd.sock")), engines, cache)
     srv = Server(conf.get("listen", "0.0.0.0"), int(conf.get("port", 8443)),
                  tls_context(conf["cert"], conf["key"]), token, phone_ips, App(ctl, cache))
@@ -90,6 +92,7 @@ def main(argv=None) -> int:
         while not stop.is_set():
             live.beat("timers")
             ctl.auto_lock_tick()
+            ctl.deep_idle_tick()
             with live.op("timers", 600):
                 ctl.maintenance_tick()
             if time.monotonic() - last_tick >= FLOOR_TICK_S:
