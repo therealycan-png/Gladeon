@@ -136,7 +136,7 @@ class BrainGolden(tc.ControllerTest):
 class P45cTest(tp.PipelineTest):
     test_fixed_routes = test_personal_locked_and_missing = test_personal_brain = test_leak_blocked = None
     test_p8c_implicit_fallback = test_general_without_note = test_deep_unavailable_prefix = None
-    test_engine_empty_and_tts = test_mid_stream_deadline = None
+    test_engine_empty_and_tts = test_mid_stream_deadline = test_busy_after_5s = None
 
     def test_p45c_followup_fallback_question(self):
         self.note("Travel.md", "Trip plan: the capital of Japan is Tokyo.")

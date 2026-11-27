@@ -21,6 +21,11 @@ DEADLINE_S = {"quick": 60.0, "deep": 200.0}
 GENERAL_FALLBACK = "GENERAL_FALLBACK"
 MIN_GENERAL_TOKENS = 60
 FALLBACK_RESERVE_DEFAULT_S = 20.0
+BUSY_WAIT_S = 5.0
+
+
+class Busy(Exception):
+    """A second interactive request waited 5 s for the chat engine (8.5): 503 BUSY."""
 
 
 @dataclass
@@ -108,8 +113,14 @@ class Pipeline:
 
     # ---- main entry ------------------------------------------------------------------------
     def handle(self, transcript: str, body_mode: str = "auto", start: Optional[float] = None) -> Reply:
-        with self.lock:
-            return self._handle(transcript, body_mode, self.d.clock() if start is None else start)
+        """One conversation at a time; a second request waits at most 5 s, then BUSY (8.5)."""
+        start = self.d.clock() if start is None else start
+        if not self.lock.acquire(timeout=BUSY_WAIT_S):
+            raise Busy()
+        try:
+            return self._handle(transcript, body_mode, start)
+        finally:
+            self.lock.release()
 
     def _handle(self, transcript: str, body_mode: str, start: float) -> Reply:
         warnings: list = []

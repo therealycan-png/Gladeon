@@ -118,6 +118,22 @@ class PipelineTest(unittest.TestCase):
         self.assertIn("1,200 pesos and 50 centavos", r.tts_text)
         self.assertIn("December 5, 2026", r.tts_text)
 
+    def test_busy_after_5s(self):
+        import threading
+        import gladeon.pipeline as P
+        from gladeon.pipeline import Busy
+        P.BUSY_WAIT_S = 0.2
+        try:
+            self.f.replies.append((["slow."] * 10, 0.1))
+            t = threading.Thread(target=self.p.handle, args=("tell me something slow",))
+            t.start()
+            time.sleep(0.1)
+            with self.assertRaises(Busy):
+                self.p.handle("hello")
+            t.join()
+        finally:
+            P.BUSY_WAIT_S = 5.0
+
     def test_mid_stream_deadline(self):
         self.f.replies.append((["First sentence.", " Second", " part"] + [" more"] * 40, 0.05))
         r = self.p.handle("tell me a story", start=time.monotonic() - 59.6)
