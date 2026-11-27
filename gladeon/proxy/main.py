@@ -90,6 +90,8 @@ def main(argv=None) -> int:
         while not stop.is_set():
             live.beat("timers")
             ctl.auto_lock_tick()
+            with live.op("timers", 600):
+                ctl.maintenance_tick()
             if time.monotonic() - last_tick >= FLOOR_TICK_S:
                 with live.op("timers", 10):
                     ctl.privd.call("clock-floor-tick")

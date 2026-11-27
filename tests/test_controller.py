@@ -153,6 +153,17 @@ class ControllerTest(unittest.TestCase):
         out = self.ctl.run_query("What's my bike lock pin?", "auto", None)
         self.assertEqual(out["route"], "STILL_READING")
 
+    def test_maintenance_calibrates_and_snapshots(self):
+        os.makedirs(os.path.join(self.vault, "notes", "_gladeon"))
+        lines = ["wifi password => Wifi"] * 10 + [f"unrelated topic {c}" for c in "abcdefghij"]
+        with open(os.path.join(self.vault, "notes", "_gladeon", "calibration.md"), "w") as f:
+            f.write("\n".join(lines))
+        self.unlock_ready()
+        self.ctl.maintenance_tick()
+        self.assertTrue(self.ctl.status()["index"]["calibrated"])
+        self.assertNotIn("INDEX_UNCALIBRATED", self.ctl.status()["warnings"])
+        self.assertEqual(len(os.listdir(os.path.join(self.vault, "backups"))), 1)
+
     def test_shutdown(self):
         self.assertEqual(self.ctl.system("shutdown")[0], 202)
         self.assertIn("poweroff", self.calls)

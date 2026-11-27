@@ -173,6 +173,8 @@ class Controller:
         os.makedirs(notes, exist_ok=True)
         self.watcher = Watcher(notes, b, cap=self._cap, clock_trusted=lambda: True,
                                now=self.clock, wall=self.wall)
+        self.calibration_due = True                        # also run once after the first full index
+        self.watcher.on_calibration = lambda: setattr(self, "calibration_due", True)
         self.stop_bg.clear()
         self.bg = [threading.Thread(target=self._watch_loop, name="watcher", daemon=True),
                    threading.Thread(target=self._index_loop, name="indexer", daemon=True)]
@@ -223,6 +225,41 @@ class Controller:
         while not self.stop_bg.is_set():
             if not self.index_once():
                 self.stop_bg.wait(1.0)
+
+    # ---- maintenance: calibration (13.6.7), daily work (13.2.6, 13.7, 14.2), disk floors (11.6)
+    def maintenance_tick(self) -> None:
+        from ..brain import maintenance as M
+        with self.mu:
+            b, w = self.brain, self.watcher
+            if b is None or w is None or self.inflight or self.clock() - self.last_interactive < INDEX_QUIET_S:
+                return
+            low = M.disk_low(self.cfg.vault_root)
+            (self.warnings.add if low else self.warnings.discard)("DISK_LOW_VAULT")
+            if getattr(self, "calibration_due", False) and self.s.engines.get("embed") == "READY":
+                path = os.path.join(self.cfg.vault_root, "notes", "_gladeon", "calibration.md")
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        text = f.read()
+                except (OSError, UnicodeDecodeError):
+                    text = None
+                if text is not None:
+                    def emb(q):
+                        try:
+                            return self.engines["embed"].embed(q, self.clock() + 10)
+                        except Exception:
+                            return None
+                    r = M.run_calibration(b, text, emb, b.pending_count(), w.first_scan_done, w.unstable_files())
+                    if "CALIBRATION_WAITING" not in r.warnings:
+                        self.calibration_due = False
+                    (self.warnings.add if "CALIBRATION_TARGET_UNRESOLVED" in r.warnings
+                     else self.warnings.discard)("CALIBRATION_TARGET_UNRESOLVED")
+                else:
+                    self.calibration_due = False
+            if self.clock() - getattr(self, "last_daily", -1e18) >= 86400:
+                self.last_daily = self.clock()
+                M.daily(b, key_change_complete=b.pending_count() == 0)
+                if not low:
+                    M.snapshot(b, os.path.join(self.cfg.vault_root, "backups"), True, int(self.wall()))
 
     # ---- search hooks for the pipeline -----------------------------------------------------
     def _search(self, text: str, floor_name: str):
@@ -306,6 +343,7 @@ class Controller:
                 finally:
                     self.brain.db.close()
             self.brain, self.watcher, self.bg = None, None, []
+            self.warnings.discard("CALIBRATION_TARGET_UNRESOLVED")
         self.privd.call("unit-stop", {"unit": "llm-embed"})        # step 6
         r = self.privd.call("vault-close", deadline_s=60)           # step 7
         with self.mu:
