@@ -41,7 +41,7 @@ Run all tests: `python3 -m unittest discover -s tests -v` (Python 3.13, standard
 - Real-device runs of privd's cryptsetup, fsck, mount and systemd calls (written and tested against a fake system only).
 - Provisioning: BIOS, disks, LUKS root with TPM, dropbear, GRUB lock, users, sudoers (section 3, 5.1).
 - Model choice and the model gate (section 18); llama.cpp build and flags (8.1) [VERIFY items].
-- `gladeon-admin` command-line verbs (only the helpers exist), offline copy, vault rotation, versions-recent.
+- `gladeon-admin` vault verbs (setup, addkey, offline copy, rotation, versions-recent, update window, token-rotate). Done so far: `client-bundle`, `key-add`, `key-remove`, `phone-replace`.
 - Pre-flight checks that read the live system (19.1 items 1–3, 5, 8–11; 19.2).
 
 ## Measurements taken here (not on Shawn's PC)

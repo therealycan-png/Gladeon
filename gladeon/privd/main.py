@@ -102,6 +102,19 @@ def build(sys_: System, gladeon_uid: int, sock: str = SOCK) -> Privd:
             return Result(0) if rc == 0 else Result(BY_NAME["PRIVD_INTERNAL"], tool_exit_code=rc)
         return fn
 
+    def sync_device_set(c: Call) -> Result:
+        """Root only: store the expected phone device; applied before the next sync start (5.2.18)."""
+        from .synccheck import SyncDevice
+        from ..admin.keys import valid_device_id
+        dev, addr = c.args.get("device_id", ""), c.args.get("address", "")
+        if not valid_device_id(dev) or not str(addr).startswith("tcp://"):
+            return Result(BY_NAME["PRIVD_INTERNAL"])
+        from ..atomic import atomic_write
+        import json as _json
+        atomic_write(os.path.join(STATE, "sync_device.json"),
+                     _json.dumps({"device_id": dev, "address": addr, "pending": True}).encode())
+        return Result(0)
+
     verbs = {
         "vault-status": status, "vault-open": vault.open,
         "vault-close": lambda c: vault.close(c, holders), "lock-intent-set": lock_intent,
@@ -111,6 +124,7 @@ def build(sys_: System, gladeon_uid: int, sock: str = SOCK) -> Privd:
         "system-stopping": stopping, "unit-start": unit("start"), "unit-stop": unit("stop"),
         "unit-restart": unit("restart"), "poweroff": power("poweroff"), "reboot": power("reboot"),
         "selfcheck": lambda c: Result(0, {"checks": []}),
+        "sync-device-set": sync_device_set,
     }
     p = Privd(sock, gladeon_uid, verbs)
     os.chown(sock, 0, grp.getgrnam("gladeon").gr_gid)

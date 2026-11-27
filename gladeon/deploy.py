@@ -220,6 +220,40 @@ ExecStart=/usr/sbin/iw dev glwlan0 set power_save off
 WantedBy=sys-subsystem-net-devices-glwlan0.device
 """
 
+SYNC_UNIT = """[Unit]
+Description=Gladeon Syncthing (notes, receive-only)
+Requires=nftables.service
+After=nftables.service
+BindsTo=srv-gladeon-vault.mount
+After=srv-gladeon-vault.mount
+
+[Service]
+User=gladeon-sync
+Group=gladeon-sync
+ExecStartPre=+/usr/local/libexec/gladeon-privd-synccheck
+ExecStart=/usr/bin/syncthing serve --no-browser --no-restart --home=/srv/gladeon/vault/syncthing
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+LimitCORE=0
+ReadWritePaths=/srv/gladeon/vault/notes /srv/gladeon/vault/syncthing
+IPAddressDeny=any
+InaccessiblePaths=/boot
+UMask=0027
+Restart=on-failure
+MemoryMax=1G
+TimeoutStopSec=20
+StandardOutput=null
+StandardError=null
+"""
+
+
+def sync_ip_dropin(c: NetConfig) -> str:
+    return f"[Service]\nIPAddressAllow={c.phone_ip} localhost\n"
+
+
 PORTS = {"quick": 9931, "deep": 9932, "embed": 9933}
 
 
@@ -246,6 +280,8 @@ def render_all(c: NetConfig) -> dict[str, str]:
         "/etc/systemd/system/gladeon-llm@.service": LLM_UNIT,
         "/etc/systemd/system/srv-gladeon-vault.mount": VAULT_MOUNT,
         "/etc/systemd/system/gladeon-wifi-tune.service": WIFI_TUNE,
+        "/etc/systemd/system/gladeon-sync.service": SYNC_UNIT,
+        "/etc/systemd/system/gladeon-sync.service.d/ip.conf": sync_ip_dropin(c),
     }
     for n, body in network_files(c).items():
         files[f"/etc/systemd/network/{n}"] = body
