@@ -32,7 +32,7 @@ class FakeCtl:
     def query_blocked(self, mode):
         return (503, "DEGRADED") if mode == "deep" and self.slow < 0 else None
 
-    def run_query(self, transcript, mode, epoch):
+    def run_query(self, transcript, mode, epoch, early=None):
         self.queries += 1
         time.sleep(self.slow)
         return {"schema": 2, "route": "GENERAL_CHAT", "display_text": transcript.upper(), "tts_text": transcript}
@@ -138,6 +138,11 @@ class ServerTest(unittest.TestCase):
         s, b, _ = self.call(c, "GET", f"/result/{rid}")
         self.assertEqual((s, b["display_text"]), (200, "SLOW"))
         c.close()
+
+    def test_app_shares_the_given_cache(self):
+        from gladeon.proxy.reqcache import RequestCache
+        c = RequestCache()
+        self.assertIs(App(FakeCtl(), c).cache, c)          # regression: empty cache is falsy
 
     def test_bad_query(self):
         c = self.conn()

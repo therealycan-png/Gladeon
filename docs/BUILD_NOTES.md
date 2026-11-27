@@ -43,4 +43,3 @@ Run all tests: `python3 -m unittest discover -s tests -v` (Python 3.13, standard
 - Model choice and the model gate (section 18); llama.cpp build and flags (8.1) [VERIFY items].
 - `gladeon-admin` command-line verbs (only the helpers exist), offline copy, vault rotation, versions-recent.
 - Pre-flight checks that read the live system (19.1 items 1–3, 5, 8–11; 19.2).
-- Swap-mode DEEP loading with the 202 "Deep loading" reply (8.3).

@@ -34,7 +34,7 @@ def err(code: str) -> dict:
 class App:
     def __init__(self, ctl: Controller, cache: Optional[RequestCache] = None, sync_wait_s: float = 205.0):
         self.ctl = ctl
-        self.cache = cache or RequestCache()
+        self.cache = cache if cache is not None else RequestCache()   # an empty cache is falsy (__len__)
         self.sync_wait_s = sync_wait_s    # how long /query waits before answering 202
         self._done: dict[str, threading.Event] = {}
 
@@ -96,9 +96,18 @@ class App:
         ev = threading.Event()
         self._done[rid] = ev
 
+        early_reply: dict = {}
+
+        def early(pair):
+            early_reply.update(self.ctl.processing_reply())
+            early_reply.update({"display_text": pair[0], "tts_text": pair[1]})
+            ev_early.set()
+
+        ev_early = threading.Event()
+
         def run():
             try:
-                out = self.ctl.run_query(transcript, mode, epoch)
+                out = self.ctl.run_query(transcript, mode, epoch, early=early)
                 out["request_id"] = rid
                 self.cache.finish(rid, 200, out, route=out.get("route"))
             except Exception as e:
@@ -107,9 +116,13 @@ class App:
                 ev.set()
                 self._done.pop(rid, None)
         threading.Thread(target=run, name="query", daemon=True).start()
-        if ev.wait(self.sync_wait_s):
-            e = self.cache.lookup(rid)
-            return e.status, e.payload
+        end = time.monotonic() + self.sync_wait_s
+        while time.monotonic() < end:
+            if ev.wait(0.05):
+                e = self.cache.lookup(rid)
+                return e.status, e.payload
+            if ev_early.is_set():
+                return 202, dict(early_reply)
         return 202, self.ctl.processing_reply()
 
     def _result(self, rid: str) -> tuple[int, dict]:

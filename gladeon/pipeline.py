@@ -49,6 +49,9 @@ class Deps:
     command: Callable[[str], tuple]                 # local command -> (display, tts); runs it
     count_tokens: Callable[[str], int] = approx_tokens
     deep_failed: Callable[[], bool] = lambda: False
+    # Called once routing knows a DEEP request needs a chat engine (8.3). Returns the monotonic time
+    # the engine that will answer became READY (the deadline counts from max(start, that)), or None.
+    prepare_deep: Callable[[], Optional[float]] = lambda: None
     pronunciation: str = "Glad-eon"
     clock: Callable[[], float] = time.monotonic
 
@@ -152,6 +155,12 @@ class Pipeline:
         if r == RT.STILL_READING:
             return self._fixed(r, mode, R.still_reading(self.d.still_reading_n()), warnings)
 
+        if mode == "deep":
+            ready_at = self.d.prepare_deep()
+            if ready_at is not None:
+                base = max(start, ready_at)
+                # answered by DEEP: 200 s; fell back to QUICK: its own 60 s from QUICK READY (8.3)
+                deadline = base + (DEADLINE_S["deep"] if self.d.engine_ready("deep") else DEADLINE_S["quick"])
         eng, prefix = self._engine_for(mode, warnings)
         if eng is None:
             return self._fixed("LOADING", mode, R.ENGINE_EMPTY, warnings + ["NO_ENGINE"])

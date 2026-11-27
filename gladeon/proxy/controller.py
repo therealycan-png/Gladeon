@@ -36,6 +36,9 @@ class Config:
     profiles: dict = field(default_factory=lambda: {"quick": Profile(), "deep": Profile()})
     auto_lock_s: int = AUTO_LOCK_S
     poll_s: float = 30.0
+    deep_plan: str = "unavailable"          # resident | swap | unavailable (8.3)
+    load_seconds: dict = field(default_factory=lambda: {"quick": 60.0, "deep": 60.0})
+    deep_idle_s: float = 600.0
 
 
 class Controller:
@@ -73,7 +76,12 @@ class Controller:
             partial_transient=self._partial_transient_with_rescan,
             still_reading_n=self._still_reading_n,
             command=self._command,
+            deep_failed=lambda: self.deep_failed_this_boot,
+            prepare_deep=self._prepare_deep,
         ))
+        self.deep_failed_this_boot = False
+        self.last_deep_request = -1e18
+        self._early = threading.local()
 
     # ---- activity / auto-lock (9.8) --------------------------------------------------------
     def touch(self) -> None:
@@ -415,6 +423,59 @@ class Controller:
         except (OSError, ValueError):
             return None
 
+    # ---- DEEP loading (8.3) ----------------------------------------------------------------
+    def wait_engine(self, name: str, timeout: float) -> bool:
+        end = self.clock() + timeout
+        while self.clock() < end:
+            if self.s.engines.get(name) == "READY":
+                return True
+            time.sleep(0.05)
+        return self.s.engines.get(name) == "READY"
+
+    def _prepare_deep(self) -> Optional[float]:
+        self.last_deep_request = self.clock()
+        if self.s.engines.get("deep") == "READY":
+            return None
+        if self.deep_failed_this_boot or self.cfg.deep_plan == "unavailable":
+            return None
+        early = getattr(self._early, "fn", None)
+        secs = int(self.cfg.load_seconds["deep"])
+        if early is not None:
+            early(R.deep_loading(secs))                       # 202 with the loading reply
+        if self.cfg.deep_plan == "swap" and self.s.engines.get("quick") == "READY":
+            self.pipeline.followup.wipe()                     # 12.3.5: wipe on DEEP swap
+            self.privd.call("unit-stop", {"unit": "llm-quick"})
+            self.set_engine("quick", "STOPPED")
+        self.set_engine("deep", "LOADING")
+        self.privd.call("unit-start", {"unit": "llm-deep"})
+        if self.wait_engine("deep", 2 * self.cfg.load_seconds["deep"]):
+            return self.clock()
+        # failure or timeout: stop DEEP, back to QUICK, answer there with the prefix (8.3)
+        self.deep_failed_this_boot = True
+        self.warnings.add("DEEP_FAILED")
+        self.privd.call("unit-stop", {"unit": "llm-deep"})
+        self.set_engine("deep", "FAILED")
+        if self.s.engines.get("quick") != "READY":
+            self.privd.call("unit-start", {"unit": "llm-quick"})
+            self.wait_engine("quick", 2 * self.cfg.load_seconds["quick"])
+        return self.clock()
+
+    def deep_idle_tick(self) -> None:
+        """Swap mode: DEEP stays loaded until 10 min without DEEP requests, then QUICK returns."""
+        if (self.cfg.deep_plan == "swap" and self.s.engines.get("deep") == "READY" and self.inflight == 0
+                and self.clock() - self.last_deep_request >= self.cfg.deep_idle_s):
+            self.pipeline.followup.wipe()
+            self.privd.call("unit-stop", {"unit": "llm-deep"})
+            self.set_engine("deep", "STOPPED")
+            self.privd.call("unit-start", {"unit": "llm-quick"})
+
+    def engine_restart(self, engine: str) -> tuple[int, dict]:
+        if engine == "deep":
+            self.deep_failed_this_boot = False
+            self.warnings.discard("DEEP_FAILED")
+        r = self.privd.call("unit-restart", {"unit": f"llm-{engine}"})
+        return (202, {"schema": SCHEMA}) if r.ok else (503, {"schema": SCHEMA, "error": "BUSY"})
+
     # ---- clock (10.4-10.6) ------------------------------------------------------------------
     def clock_check(self) -> None:
         """Boot rule: now < privd's floor -> untrusted."""
@@ -454,9 +515,16 @@ class Controller:
 
     # ---- /query ----------------------------------------------------------------------------
     def query_blocked(self, mode: str):
-        return query_blocked(self.s)
+        b = query_blocked(self.s)
+        if b and b[1] == "LOADING" and self.s.engines.get("deep") == "LOADING" and mode != "deep":
+            return b                       # 8.3: QUICK-mode chat requests get 503 LOADING during a swap
+        if b and self.s.engines.get("deep") == "LOADING":
+            return None                    # routes needing no engine still answer; DEEP waits in prepare
+        return b
 
-    def run_query(self, transcript: str, mode: str, client_epoch) -> dict:
+    def run_query(self, transcript: str, mode: str, client_epoch, early=None) -> dict:
+        """`early(pair)` releases the HTTP reply as a 202 with that (display, tts) while work goes on."""
+        self._early.fn = early
         if isinstance(client_epoch, int) and client_epoch > 0:
             self.client_epoch(client_epoch)
         with self.mu:
@@ -487,10 +555,6 @@ class Controller:
         if not r.ok:
             return 503, {"schema": SCHEMA, "error": r.name or "BUSY"}
         return 202, {"schema": SCHEMA}
-
-    def engine_restart(self, engine: str) -> tuple[int, dict]:
-        r = self.privd.call("unit-restart", {"unit": f"llm-{engine}"})
-        return (202, {"schema": SCHEMA}) if r.ok else (503, {"schema": SCHEMA, "error": "BUSY"})
 
     def preflight(self) -> list:
         return []
