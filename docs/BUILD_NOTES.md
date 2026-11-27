@@ -43,3 +43,7 @@ Run all tests: `python3 -m unittest discover -s tests -v` (Python 3.13, standard
 - Model choice and the model gate (section 18); llama.cpp build and flags (8.1) [VERIFY items].
 - `gladeon-admin` command-line verbs (only the helpers exist), offline copy, vault rotation, versions-recent.
 - Pre-flight checks that read the live system (19.1 items 1–3, 5, 8–11; 19.2).
+
+## Measurements taken here (not on Shawn's PC)
+
+- **Vector scan gate (13.5.6).** `scan_gate(768)` on this cloud container (Xeon, 4 vCPU, Python 3.13): **6,000 chunks** within 150 ms, just above the spec's 5,000 floor. At ~3 chunks per note that is about 2,000 notes before older notes become FTS-only. If Shawn's PC is similar, two options: a smaller embedding dimension (Matryoshka truncation to 256 dims, 13.5.5, a new `emb_key`), which should roughly triple the ceiling, or a small C scan routine. Re-measure on the PC first.

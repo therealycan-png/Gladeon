@@ -291,3 +291,24 @@ class _txn:
     def __exit__(self, et, ev, tb):
         self.db.execute("COMMIT" if et is None else "ROLLBACK")
         return False
+
+
+# ---- 13.5.6 scan gate -----------------------------------------------------------------------
+def scan_gate(dim: int, budget_s: float = 0.150, lo: int = 5000, hi: int = 25000, step: int = 1000,
+              clock=None) -> int:
+    """Largest N (multiple of `step`, lo..hi) whose full int8 sumprod scan takes <= budget_s.
+    Returns 0 if even `lo` is too slow (the caller reports the index as over-ceiling)."""
+    import random
+    import time as _t
+    clock = clock or _t.perf_counter
+    rnd = random.Random(7)
+    q = array("b", (rnd.randint(-127, 127) for _ in range(dim)))
+    vecs = [array("b", (rnd.randint(-127, 127) for _ in range(dim))) for _ in range(hi)]
+    best = 0
+    for n in range(lo, hi + 1, step):
+        t0 = clock()
+        sorted(((math.sumprod(q, v), i) for i, v in enumerate(vecs[:n])), reverse=True)[:VECTOR_TOP]
+        if clock() - t0 > budget_s:
+            break
+        best = n
+    return best

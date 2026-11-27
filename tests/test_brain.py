@@ -170,6 +170,29 @@ class IndexTest(unittest.TestCase):
         self.assertEqual(self.b.gc_vectors(False), 1)
 
 
+class ScanGateTest(unittest.TestCase):
+    def test_gate_logic(self):
+        from gladeon.brain.index import scan_gate
+        t = [0.0]
+
+        def clock():          # each timed scan "takes" n/100,000 s: 5,000 -> 50 ms ... 16,000 -> 160 ms
+            return t[0]
+        import gladeon.brain.index as I
+        orig = I.math.sumprod
+        calls = [0]
+
+        def fake(a, b):
+            calls[0] += 1
+            t[0] += 1e-5
+            return 0
+        I.math.sumprod = fake
+        try:
+            self.assertEqual(scan_gate(4, clock=clock), 15000)
+            self.assertEqual(scan_gate(4, budget_s=0.01, clock=clock), 0)
+        finally:
+            I.math.sumprod = orig
+
+
 class WatcherTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
