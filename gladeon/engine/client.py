@@ -159,39 +159,33 @@ class Engine:
              cancel: Optional[threading.Event] = None,
              on_text: Optional[Callable[[str], bool]] = None) -> ChatResult:
         """Streams and aggregates. Closing the connection cancels the server task (8.6.1).
-        `on_text(accumulated)` may return False to stop early (12.2 abstention prefix rule)."""
+        `on_text(accumulated)` may return False to stop early (12.2 abstention prefix rule).
+        Reads use our own buffer over the raw socket with select() in <= 5 s slices, so a long
+        silence (DEEP prompt processing) never poisons the stream the way a timed-out file object does."""
         start = self.clock()
         if start >= deadline:
             raise DeadlineExceeded("chat")
-        # a dedicated connection per stream so close() cancels exactly this task
-        c = http.client.HTTPConnection(self.host, self.port, timeout=READ_LOOP_S)
         parts: list[str] = []
         finish = None
         ntok = 0
+        body = json.dumps(params.body(messages)).encode()
         try:
+            sock = socket.create_connection((self.host, self.port), timeout=min(READ_LOOP_S, deadline - start))
+        except OSError as e:
+            raise EngineError(type(e).__name__) from None
+        rd = _Stream(sock, deadline, cancel, self.clock, lambda: "".join(parts))
+        try:
+            head = (f"POST /v1/chat/completions HTTP/1.1\r\nHost: {self.host}:{self.port}\r\n"
+                    f"Authorization: Bearer {self.api_key}\r\nContent-Type: application/json\r\n"
+                    f"Accept: text/event-stream\r\nContent-Length: {len(body)}\r\nConnection: close\r\n\r\n")
             try:
-                c.request("POST", "/v1/chat/completions", json.dumps(params.body(messages)), self._headers())
-                r = c.getresponse()
-            except (OSError, http.client.HTTPException) as e:
+                sock.sendall(head.encode() + body)
+            except OSError as e:
                 raise EngineError(type(e).__name__) from None
-            if r.status != 200:
-                raise EngineError(f"HTTP {r.status}")
-            while True:
-                if cancel is not None and cancel.is_set():
-                    raise Cancelled("chat")
-                left = deadline - self.clock()
-                if left <= 0:
-                    raise DeadlineExceeded("chat", "".join(parts))
-                if c.sock is not None:
-                    c.sock.settimeout(max(0.05, min(READ_LOOP_S, left)))
-                try:
-                    line = r.fp.readline(65536)
-                except (socket.timeout, TimeoutError):
-                    continue          # loop re-checks deadline and cancel
-                except OSError as e:
-                    raise EngineError(type(e).__name__) from None
-                if not line:
-                    break
+            status, headers = rd.read_head()
+            if status != 200:
+                raise EngineError(f"HTTP {status}")
+            for line in rd.lines(chunked="chunked" in headers.get("transfer-encoding", "").lower()):
                 line = line.strip()
                 if not line.startswith(b"data:"):
                     continue
@@ -213,5 +207,110 @@ class Engine:
                 if ch.get("finish_reason"):
                     finish = ch["finish_reason"]
         finally:
-            c.close()
+            try:
+                sock.close()
+            except OSError:
+                pass
         return ChatResult("".join(parts), finish, ntok, self.clock() - start)
+
+
+class _Stream:
+    """Line reader over a raw socket: select() in <= 5 s slices, deadline and cancel checked each slice."""
+
+    MAX_LINE = 1 << 20
+
+    def __init__(self, sock: socket.socket, deadline: float, cancel, clock, partial):
+        self.sock, self.deadline, self.cancel, self.clock, self.partial = sock, deadline, cancel, clock, partial
+        self.buf = b""
+        self.eof = False
+
+    def _fill(self) -> bool:
+        import select
+        while True:
+            if self.cancel is not None and self.cancel.is_set():
+                raise Cancelled("chat")
+            left = self.deadline - self.clock()
+            if left <= 0:
+                raise DeadlineExceeded("chat", self.partial())
+            try:
+                r, _, _ = select.select([self.sock], [], [], max(0.01, min(READ_LOOP_S, left)))
+            except (OSError, ValueError) as e:
+                raise EngineError(type(e).__name__) from None
+            if not r:
+                continue                     # quiet slice: loop re-checks deadline and cancel
+            try:
+                chunk = self.sock.recv(65536)
+            except (BlockingIOError, InterruptedError):
+                continue
+            except OSError as e:
+                raise EngineError(type(e).__name__) from None
+            if not chunk:
+                self.eof = True
+                return False
+            self.buf += chunk
+            return True
+
+    def _line(self) -> Optional[bytes]:
+        while b"\n" not in self.buf:
+            if len(self.buf) > self.MAX_LINE:
+                raise EngineError("line too long")
+            if not self._fill():
+                if self.buf:
+                    out, self.buf = self.buf, b""
+                    return out
+                return None
+        line, self.buf = self.buf.split(b"\n", 1)
+        return line + b"\n"
+
+    def _exact(self, n: int) -> bytes:
+        while len(self.buf) < n:
+            if not self._fill():
+                raise EngineError("short read")
+        out, self.buf = self.buf[:n], self.buf[n:]
+        return out
+
+    def read_head(self) -> tuple[int, dict]:
+        first = self._line()
+        if not first:
+            raise EngineError("no response")
+        try:
+            status = int(first.split()[1])
+        except (IndexError, ValueError):
+            raise EngineError("bad status line") from None
+        headers = {}
+        while True:
+            line = self._line()
+            if line is None:
+                raise EngineError("eof in headers")
+            line = line.strip()
+            if not line:
+                return status, headers
+            k, _, v = line.decode("latin-1").partition(":")
+            headers[k.strip().lower()] = v.strip()
+
+    def lines(self, chunked: bool):
+        if not chunked:
+            while True:
+                ln = self._line()
+                if ln is None:
+                    return
+                yield ln
+        # decode chunked transfer encoding into a body buffer, then split lines from it
+        body = b""
+        while True:
+            size_line = self._line()
+            if size_line is None:
+                return
+            try:
+                size = int(size_line.split(b";")[0].strip() or b"0", 16)
+            except ValueError:
+                raise EngineError("bad chunk size") from None
+            if size == 0:
+                if body:
+                    yield body
+                return
+            body += self._exact(size)
+            self._exact(2)                   # CRLF after each chunk
+            while b"\n" in body:
+                ln, body = body.split(b"\n", 1)
+                yield ln + b"\n"

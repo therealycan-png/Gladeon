@@ -66,8 +66,11 @@ def main(argv=None) -> int:
                  tls_context(conf["cert"], conf["key"]), token, phone_ips, App(ctl, cache))
     from .. import preflight as PF
     ips = conf.get("pc_ips", {})
-    ctl.preflight_fn = lambda: PF.run_all(conf["cert"], [ips.get("eth", ""), ips.get("wlan", "")],
-                                          profiles["quick"].control_tokens, [], 0, int(time.time()))
+    def run_preflight():
+        floor = int(ctl.privd.call("vault-status").data.get("floor") or 0)    # privd's floor, not 0
+        return PF.run_all(conf["cert"], [ips.get("eth", ""), ips.get("wlan", "")],
+                          profiles["quick"].control_tokens, [], floor, int(time.time()))
+    ctl.preflight_fn = run_preflight
     srv.start()
     hygiene.sd_notify("READY=1")                     # listener first (7.1.3)
     live = hygiene.Liveness()

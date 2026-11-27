@@ -264,6 +264,14 @@ class WatcherTest(unittest.TestCase):
         self.tick(11)
         self.assertEqual(self.b.relpaths(), set())
 
+    def test_deleted_while_locked_is_purged(self):
+        m, cs = chunk_note("gone.md", "deleted on the phone.", "2026-11-20", TODAY)
+        self.b.upsert_note("gone.md", m, cs, "h", 1, 1, 0)       # indexed in an earlier session
+        self.tick()
+        self.assertIn("gone.md", self.b.relpaths())
+        self.tick(11)
+        self.assertNotIn("gone.md", self.b.relpaths())
+
     def test_p22_rename_and_heading_edit(self):
         old = self.write("2026-11-01 Trip.md", "# Plan\nPack bags.\n\n# Food\nBring rice.", mtime=self.wall[0] - 100)
         self.tick()

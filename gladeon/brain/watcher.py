@@ -137,18 +137,18 @@ class Watcher:
                 continue
             self._ingest(rel, prev, st, st_)
         self._calibration(now)
-        for rel in list(self.seen):
+        # 13.3.4: missing in two scans >= 10 s apart -> purged. Candidates are paths we saw before
+        # and paths only the database knows (deleted while locked or while the proxy was down).
+        for rel in (set(self.seen) | self.brain.relpaths()) - present:
+            self.missing_since.setdefault(rel, now)
+        for rel, first in list(self.missing_since.items()):
             if rel in present:
-                continue
-            first = self.missing_since.setdefault(rel, now)
-            if now - first >= MISSING_GAP_S:
-                del self.seen[rel]
                 del self.missing_since[rel]
+            elif now - first >= MISSING_GAP_S:
+                del self.missing_since[rel]
+                self.seen.pop(rel, None)
                 if self.brain.purge_note(rel):
                     st_.purged += 1
-        for rel in self.brain.relpaths() - set(self.seen):
-            if rel not in self.missing_since:   # indexed before this process started; purge after the gap
-                self.missing_since[rel] = now
         self.first_scan_done = True
         return st_
 

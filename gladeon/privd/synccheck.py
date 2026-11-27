@@ -20,8 +20,9 @@ def _text(el: Optional[ET.Element], default: str = "") -> str:
     return (el.text or "").strip() if el is not None else default
 
 
-def check(xml_text: str, expected: SyncDevice, notes_path: str) -> list[str]:
-    """Returns a list of failed checks; empty = OK to start."""
+def check(xml_text: str, expected: SyncDevice, notes_path: str, local_id: str) -> list[str]:
+    """Returns a list of failed checks; empty = OK to start. `local_id` is the PC's own device ID,
+    which Syncthing lists as a device and in each folder's device list."""
     try:
         root = ET.fromstring(xml_text)
     except ET.ParseError:
@@ -41,7 +42,7 @@ def check(xml_text: str, expected: SyncDevice, notes_path: str) -> list[str]:
         errs.append("GUI_NOT_LOCAL")
     if gui is None or not _text(gui.find("password")):
         errs.append("GUI_NO_PASSWORD")
-    devices = root.findall("device")
+    devices = [d for d in root.findall("device") if d.get("id") != local_id]
     if len(devices) != 1:
         errs.append("DEVICE_COUNT")
     for d in devices:
@@ -66,7 +67,7 @@ def check(xml_text: str, expected: SyncDevice, notes_path: str) -> list[str]:
         if f.get("ignorePerms") != "true":
             errs.append("FOLDER_IGNOREPERMS")
         devs = [x.get("id") for x in f.findall("device")]
-        if [x for x in devs if x != expected.device_id]:
+        if [x for x in devs if x not in (expected.device_id, local_id)]:
             errs.append("FOLDER_SHARED_WITH_OTHER")
         v = f.find("versioning")
         if v is None or v.get("type") != "staggered":
@@ -78,17 +79,19 @@ def check(xml_text: str, expected: SyncDevice, notes_path: str) -> list[str]:
     return errs
 
 
-def apply_device(xml_text: str, dev: SyncDevice) -> str:
-    """Replace the single device (and the folder's share) with the pending phone device."""
+def apply_device(xml_text: str, dev: SyncDevice, local_id: str) -> str:
+    """Replace the phone device (and the folder's share) with the pending one; the local device stays."""
     root = ET.fromstring(xml_text)
     for d in root.findall("device"):
-        root.remove(d)
+        if d.get("id") != local_id:
+            root.remove(d)
     nd = ET.SubElement(root, "device", {"id": dev.device_id, "name": "phone", "compression": "metadata",
                                         "introducer": "false", "skipIntroductionRemovals": "false",
                                         "introducedBy": "", "autoAcceptFolders": "false"})
     ET.SubElement(nd, "address").text = dev.address
     for f in root.findall("folder"):
         for d in f.findall("device"):
-            f.remove(d)
+            if d.get("id") != local_id:
+                f.remove(d)
         ET.SubElement(f, "device", {"id": dev.device_id, "introducedBy": ""})
     return ET.tostring(root, encoding="unicode")

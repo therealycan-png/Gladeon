@@ -13,6 +13,7 @@ class FakeLlama:
         self.cancelled = 0
         self.embed_fail = set()
         self.embed_mode = "len"
+        self.chunked = False
         outer = self
 
         class H(BaseHTTPRequestHandler):
@@ -60,16 +61,27 @@ class FakeLlama:
                 pieces, delay = outer.replies.pop(0) if outer.replies else (["ok"], 0)
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
+                if outer.chunked:
+                    self.send_header("Transfer-Encoding", "chunked")
                 self.end_headers()
+
+                def out(b):
+                    if outer.chunked:   # split each event across two chunks to exercise reassembly
+                        for part in (b[:7], b[7:]):
+                            self.wfile.write(f"{len(part):x}\r\n".encode() + part + b"\r\n")
+                    else:
+                        self.wfile.write(b)
+                    self.wfile.flush()
                 try:
                     for i, p in enumerate(pieces):
                         time.sleep(delay)
                         ev = {"choices": [{"delta": {"content": p},
                                            "finish_reason": "stop" if i == len(pieces) - 1 else None}]}
-                        self.wfile.write(b"data: " + json.dumps(ev).encode() + b"\n\n")
+                        out(b"data: " + json.dumps(ev).encode() + b"\n\n")
+                    out(b"data: [DONE]\n\n")
+                    if outer.chunked:
+                        self.wfile.write(b"0\r\n\r\n")
                         self.wfile.flush()
-                    self.wfile.write(b"data: [DONE]\n\n")
-                    self.wfile.flush()
                 except (BrokenPipeError, ConnectionResetError):
                     outer.cancelled += 1
                 self.close_connection = True

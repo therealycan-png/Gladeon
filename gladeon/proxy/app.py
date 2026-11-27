@@ -32,10 +32,12 @@ def err(code: str) -> dict:
 
 
 class App:
-    def __init__(self, ctl: Controller, cache: Optional[RequestCache] = None, sync_wait_s: float = 205.0):
+    def __init__(self, ctl: Controller, cache: Optional[RequestCache] = None, sync_wait_s: float = 25.0):
         self.ctl = ctl
         self.cache = cache if cache is not None else RequestCache()   # an empty cache is falsy (__len__)
-        self.sync_wait_s = sync_wait_s    # how long /query waits before answering 202
+        # how long /query holds the connection before a 202; well under curl --max-time 200, and short
+        # enough that slow answers do not pin all 4 workers (the phone polls /result after a 202)
+        self.sync_wait_s = sync_wait_s
         self._done: dict[str, threading.Event] = {}
 
     def __call__(self, req: Request) -> tuple[int, dict]:
@@ -80,19 +82,21 @@ class App:
         rid = (req.header("x-request-id") or "").lower()
         if not valid_uuid4(rid):
             raise HttpError(400, "BAD_REQUEST")
-        known = self.cache.lookup(rid)
-        if known is not None:                       # dedup (11.3): 202 while running, cached after
-            return (known.status, known.payload) if known.state == "done" else (202, self.ctl.processing_reply())
         transcript = body.get("transcript")
         mode = body.get("mode", "auto")
         epoch = body.get("client_epoch")
         if not isinstance(transcript, str) or mode not in ("auto", "quick", "deep") or \
                 (epoch is not None and not isinstance(epoch, int)):
             raise HttpError(400, "BAD_REQUEST")
+        if not self.cache.begin(rid):               # dedup (11.3), atomic: 202 while running, cached after
+            known = self.cache.lookup(rid)
+            if known is not None and known.state == "done":
+                return known.status, known.payload
+            return 202, self.ctl.processing_reply()
         blocked = self.ctl.query_blocked(mode)
         if blocked:
+            self.cache.forget(rid)
             return blocked[0], err(blocked[1])
-        self.cache.begin(rid)
         ev = threading.Event()
         self._done[rid] = ev
 
@@ -111,7 +115,8 @@ class App:
                 out["request_id"] = rid
                 self.cache.finish(rid, 200, out, route=out.get("route"))
             except Exception as e:
-                self.cache.finish(rid, 503, err("BUSY"))
+                code = getattr(e, "code", "BUSY")
+                self.cache.finish(rid, getattr(e, "status", 503), err(code if isinstance(code, str) else "BUSY"))
             finally:
                 ev.set()
                 self._done.pop(rid, None)

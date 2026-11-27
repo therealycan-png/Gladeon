@@ -32,6 +32,12 @@ class EngineTest(unittest.TestCase):
         r = self.e.chat([{"role": "user", "content": "hi"}], ChatParams("QUICK"), self.dl())
         self.assertEqual((r.text, r.finish_reason, r.tokens), ("Hello there.", "stop", 3))
 
+    def test_chunked_stream(self):
+        self.f.chunked = True
+        self.f.replies.append((["Hel", "lo", " there."], 0))
+        r = self.e.chat([], ChatParams("QUICK"), self.dl())
+        self.assertEqual((r.text, r.finish_reason), ("Hello there.", "stop"))
+
     def test_auth_required(self):
         bad = Engine("quick", "wrong", port=self.f.port)
         self.assertRaises(EngineError, bad.chat, [], ChatParams("QUICK"), self.dl())
@@ -49,6 +55,16 @@ class EngineTest(unittest.TestCase):
         self.assertEqual(a.error, "CANCELLED")
         time.sleep(0.3)
         self.assertGreaterEqual(self.f.cancelled, 1)     # server saw the closed stream
+
+    def test_long_silence_before_first_token(self):
+        import gladeon.engine.client as C
+        C.READ_LOOP_S = 0.2                      # a 0.7 s silence spans several read slices
+        try:
+            self.f.replies.append((["Slow", " but fine."], 0.7))
+            r = self.e.chat([], ChatParams("DEEP"), self.dl())
+            self.assertEqual(r.text, "Slow but fine.")
+        finally:
+            C.READ_LOOP_S = 5.0
 
     def test_early_stop_callback(self):
         self.f.replies.append((["I don't", " see that", " in your notes.", " extra"], 0.01))

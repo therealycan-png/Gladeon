@@ -273,7 +273,7 @@ class Controller:
                 self.last_daily = self.clock()
                 M.daily(b, key_change_complete=b.pending_count() == 0)
                 if not low:
-                    M.snapshot(b, os.path.join(self.cfg.vault_root, "backups"), True, int(self.wall()))
+                    M.snapshot(b, os.path.join(self.cfg.vault_root, "backups"), self.clock_trusted, int(self.wall()))
 
     # ---- search hooks for the pipeline -----------------------------------------------------
     def _search(self, text: str, floor_name: str):
@@ -349,13 +349,17 @@ class Controller:
             time.sleep(0.05)
         self.cache.replace_brain(lambda e: {"schema": SCHEMA, "route": "VAULT_LOCKED",
                                             "display_text": R.VAULT_LOCKED[0], "tts_text": R.VAULT_LOCKED[1]})
-        self.pipeline.followup.wipe()
+        self.pipeline.wipe()
         with self.mu:                                              # step 5
             if self.brain is not None:
                 try:
                     self.brain.db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-                finally:
+                except Exception as e:                             # never stop the lock here
+                    log.error("checkpoint failed %s", type(e).__name__)
+                try:
                     self.brain.db.close()
+                except Exception as e:
+                    log.error("db close failed %s", type(e).__name__)
             self.brain, self.watcher, self.bg = None, None, []
             self.warnings.discard("CALIBRATION_TARGET_UNRESOLVED")
         self.privd.call("unit-stop", {"unit": "llm-embed"})        # step 6
@@ -443,7 +447,7 @@ class Controller:
         if early is not None:
             early(R.deep_loading(secs))                       # 202 with the loading reply
         if self.cfg.deep_plan == "swap" and self.s.engines.get("quick") == "READY":
-            self.pipeline.followup.wipe()                     # 12.3.5: wipe on DEEP swap
+            self.pipeline.wipe()                     # 12.3.5: wipe on DEEP swap
             self.privd.call("unit-stop", {"unit": "llm-quick"})
             self.set_engine("quick", "STOPPED")
         self.set_engine("deep", "LOADING")
@@ -464,7 +468,7 @@ class Controller:
         """Swap mode: DEEP stays loaded until 10 min without DEEP requests, then QUICK returns."""
         if (self.cfg.deep_plan == "swap" and self.s.engines.get("deep") == "READY" and self.inflight == 0
                 and self.clock() - self.last_deep_request >= self.cfg.deep_idle_s):
-            self.pipeline.followup.wipe()
+            self.pipeline.wipe()
             self.privd.call("unit-stop", {"unit": "llm-deep"})
             self.set_engine("deep", "STOPPED")
             self.privd.call("unit-start", {"unit": "llm-quick"})
@@ -515,12 +519,10 @@ class Controller:
 
     # ---- /query ----------------------------------------------------------------------------
     def query_blocked(self, mode: str):
-        b = query_blocked(self.s)
-        if b and b[1] == "LOADING" and self.s.engines.get("deep") == "LOADING" and mode != "deep":
-            return b                       # 8.3: QUICK-mode chat requests get 503 LOADING during a swap
-        if b and self.s.engines.get("deep") == "LOADING":
-            return None                    # routes needing no engine still answer; DEEP waits in prepare
-        return b
+        """Up-front refusals only. During a DEEP swap nothing is refused here: routes that need no
+        engine are answered, and a request that needs a chat engine gets 503 LOADING from the
+        pipeline (EngineLoading) once routing has decided that (8.3)."""
+        return query_blocked(self.s)
 
     def run_query(self, transcript: str, mode: str, client_epoch, early=None) -> dict:
         """`early(pair)` releases the HTTP reply as a 202 with that (display, tts) while work goes on."""
@@ -543,8 +545,10 @@ class Controller:
                 "display_text": rep.display_text, "tts_text": rep.tts_text, "warnings": rep.warnings}
 
     def processing_reply(self) -> dict:
+        ls = self.cfg.load_seconds
+        window = int(2 * ls["deep"] + max(200, ls["quick"] + 60) + 10)     # 8.6.3
         return {"schema": SCHEMA, "status": "PROCESSING", "display_text": "Working on it.",
-                "tts_text": "Working on it.", "retry_window_s": 210}
+                "tts_text": "Working on it.", "retry_window_s": window}
 
     # ---- system ----------------------------------------------------------------------------
     def system(self, action: str) -> tuple[int, dict]:

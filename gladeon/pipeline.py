@@ -26,6 +26,12 @@ BUSY_WAIT_S = 5.0
 
 class Busy(Exception):
     """A second interactive request waited 5 s for the chat engine (8.5): 503 BUSY."""
+    status, code = 503, "BUSY"
+
+
+class EngineLoading(Exception):
+    """The request needs a chat engine and none is READY (e.g. QUICK stopped for a DEEP swap): 503 LOADING."""
+    status, code = 503, "LOADING"
 
 
 @dataclass
@@ -70,16 +76,27 @@ class Pipeline:
     def __init__(self, deps: Deps):
         self.d = deps
         self.followup = RT.FollowUp()
-        self._hits: dict = {}
+        self._hits: dict = {}          # this request's hits (chunk id -> Hit)
+        self._fu_hits: dict = {}       # hits behind followup.chunk_ids, kept only as long as the follow-up
         self.lock = threading.Lock()   # one conversation; the proxy serializes chat anyway
 
     # ---- helpers ---------------------------------------------------------------------------
+    def wipe(self) -> None:
+        """Drop all conversation state and any note text held in memory (lock, 12.3.5)."""
+        self._reset_followup()
+        self._hits = {}
+
+    def _reset_followup(self) -> None:
+        self.followup.wipe()
+        self._fu_hits = {}
+
     def _fixed(self, route: str, mode: str, pair, warnings=(), keep_route: Optional[str] = None) -> Reply:
         if keep_route == RT.FINANCE_DEFERRED:
             self.followup.route, self.followup.turns = RT.FINANCE_DEFERRED, []
             self.followup.last_reply = self.d.clock()
+            self._fu_hits = {}
         else:
-            self.followup.wipe()
+            self.wipe()
         return Reply(route, mode, pair[0], pair[1], list(warnings))
 
     def _search_ids(self, text: str, floor_name: str) -> list:
@@ -123,10 +140,12 @@ class Pipeline:
         try:
             return self._handle(transcript, body_mode, start)
         finally:
+            self._hits = {}                       # note text from this request is not kept
             self.lock.release()
 
     def _handle(self, transcript: str, body_mode: str, start: float) -> Reply:
         warnings: list = []
+        self._hits = dict(self._fu_hits)          # per request; follow-up hits carried explicitly
         n = normalize(transcript, body_mode)
         mode = n.mode
         if n.empty:
@@ -138,7 +157,7 @@ class Pipeline:
         deadline = start + DEADLINE_S[mode]
         fu = self.followup if self.followup.active(self.d.clock()) else None
         if fu is None and self.followup.route is not None:
-            self.followup.wipe()
+            self.wipe()
         rr = RT.route(text, search_text, self.d.vault_ready(), self._search_ids,
                       self.d.partial_transient, fu, self.d.clock())
         r = rr.route
@@ -156,14 +175,19 @@ class Pipeline:
             return self._fixed(r, mode, R.still_reading(self.d.still_reading_n()), warnings)
 
         if mode == "deep":
-            ready_at = self.d.prepare_deep()
+            # the DEEP load can take minutes: let other requests (fixed replies) through meanwhile
+            self.lock.release()
+            try:
+                ready_at = self.d.prepare_deep()
+            finally:
+                self.lock.acquire()
             if ready_at is not None:
                 base = max(start, ready_at)
                 # answered by DEEP: 200 s; fell back to QUICK: its own 60 s from QUICK READY (8.3)
                 deadline = base + (DEADLINE_S["deep"] if self.d.engine_ready("deep") else DEADLINE_S["quick"])
         eng, prefix = self._engine_for(mode, warnings)
         if eng is None:
-            return self._fixed("LOADING", mode, R.ENGINE_EMPTY, warnings + ["NO_ENGINE"])
+            raise EngineLoading()
         sticky = fu is not None and rr.route == fu.route
         turns = list(fu.turns) if sticky else []
         question = text
@@ -228,6 +252,7 @@ class Pipeline:
             self.followup.chunk_ids = used_ids
             self.followup.fallback_eligible = rr.fallback_eligible
             self.followup.question = gq
+            self._fu_hits = {i: self._hits[i] for i in used_ids if i in self._hits}
         return rep
 
     # ---- shared ending ---------------------------------------------------------------------
@@ -244,11 +269,13 @@ class Pipeline:
             text = a.text.strip()
         fu = self.followup
         if fu.route != store_route:
-            fu.wipe()
+            self._reset_followup()          # keeps this request's hits
             fu.route = store_route
         fu.turns = (fu.turns + [(question, text)])[-2:]
         fu.question = question
         fu.last_reply = self.d.clock()
+        if store_route != RT.BRAIN_RAG:
+            self._fu_hits = {}
         return Reply(route, mode, text, to_tts(text, self.d.pronunciation), warnings, list(chunk_ids))
 
 

@@ -47,3 +47,20 @@ Run all tests: `python3 -m unittest discover -s tests -v` (Python 3.13, standard
 ## Measurements taken here (not on Shawn's PC)
 
 - **Vector scan gate (13.5.6).** `scan_gate(768)` on this cloud container (Xeon, 4 vCPU, Python 3.13): **6,000 chunks** within 150 ms, just above the spec's 5,000 floor. At ~3 chunks per note that is about 2,000 notes before older notes become FTS-only. If Shawn's PC is similar, two options: a smaller embedding dimension (Matryoshka truncation to 256 dims, 13.5.5, a new `emb_key`), which should roughly triple the ceiling, or a small C scan routine. Re-measure on the PC first.
+
+## Code review, round 1 (after the build)
+
+A review of everything from the brain module onward found 10 issues. All are fixed, each with a regression test:
+
+1. Chat streams broke after 5 s of silence. A timed-out socket file cannot be read again, so a DEEP prompt that took more than 5 s before its first token failed. The stream reader now uses select() on the raw socket and its own buffer, and handles chunked encoding.
+2. Notes deleted while the vault was locked (or the proxy was down) were never removed from the index. Database-only paths now go through the same "missing in two scans" rule.
+3. Note text from search hits stayed in proxy memory after lock, and that cache grew forever. Hits now live for one request; only the follow-up's hits are kept, and lock wipes them.
+4. During a DEEP swap, QUICK requests that need a chat engine did not get 503 LOADING. The pipeline now raises it after routing, and it releases its lock while DEEP loads, so fixed replies are still answered.
+5. A failing checkpoint or close of the database stopped the lock sequence, leaving the vault open in LOCKING. Both errors are now logged and the lock carries on.
+6. Snapshots ran with an untrusted clock. They now respect `clock_trusted`.
+7. `/query` held the connection up to 205 s, longer than the phone's 200 s curl limit, so slow answers pinned all 4 workers. It now answers 202 after 25 s and the phone polls. `retry_window_s` follows the 8.6.3 formula.
+8. Two requests with the same ID could both run (check-then-insert race). Registration is now atomic and the cache has a lock.
+9. The Syncthing check rejected real configs, because Syncthing lists the PC's own device too. The local device ID is now passed in and kept.
+10. `/preflight` compared the clock with floor 0. It now uses privd's floor.
+
+The review also noticed that about 50 `__pycache__` files had been committed. They are removed and ignored.
