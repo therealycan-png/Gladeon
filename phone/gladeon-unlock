@@ -1,0 +1,10 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Unlock the vault. The passphrase is read without echo and sent on stdin, never in argv.
+. "$(dirname "$(readlink -f "$0")")/gladeon-lib.sh"
+IFS= read -rs -p "Vault passphrase: " pw; echo
+gl_request POST /vault/unlock < <(jq -cn --arg p "$pw" '{passphrase:$p}')
+unset pw
+case "$GL_CODE" in
+  202) echo "Unlocking." ;;
+  *) gl_err; exit 1 ;;
+esac

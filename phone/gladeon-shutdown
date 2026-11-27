@@ -1,0 +1,9 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Usage: gladeon-shutdown [--reboot]
+. "$(dirname "$(readlink -f "$0")")/gladeon-lib.sh"
+what=SHUTDOWN path=/system/shutdown
+[ "${1:-}" = --reboot ] && { what=REBOOT; path=/system/reboot; }
+read -r -p "Type $what to confirm: " c
+[ "$c" = "$what" ] || { echo "Cancelled."; exit 1; }
+gl_request POST "$path" < <(jq -cn --arg c "$what" '{confirm:$c}')
+[ "$GL_CODE" = 202 ] && echo "OK." || { gl_err; exit 1; }

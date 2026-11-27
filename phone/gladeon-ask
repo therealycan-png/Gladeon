@@ -1,0 +1,42 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Ask Gladeon. Usage: gladeon-ask [--deep|--quick] [text...]; with no text, listens once (on-device STT).
+. "$(dirname "$(readlink -f "$0")")/gladeon-lib.sh"
+mode=auto
+case "${1:-}" in --deep) mode=deep; shift ;; --quick) mode=quick; shift ;; esac
+started=$(date +%s)
+if [ "$#" -gt 0 ]; then text="$*"
+else
+  command -v termux-wake-lock >/dev/null && termux-wake-lock
+  text="$(termux-speech-to-text 2>/dev/null)"
+fi
+trap 'if command -v termux-wake-unlock >/dev/null; then termux-wake-unlock; fi' EXIT
+[ -z "$text" ] && { echo "Nothing heard." >&2; exit 1; }
+if [ $(( $(date +%s) - started )) -gt 30 ]; then   # 11.9.4: stale command dropped
+  gl_say "That took too long, so I dropped it. Please ask again."; exit 1
+fi
+rid="$(gl_uuid)"
+gl_request POST /query "$rid" < <(jq -cn --arg t "$text" --arg m "$mode" --argjson e "$(date +%s)" \
+   '{transcript:$t, client_epoch:$e, mode:$m}')
+window=210
+if [ "$GL_EXIT" = 28 ] || [ "$GL_CODE" = 202 ]; then
+  if [ "$GL_CODE" = 202 ]; then
+    gl_say "$(gl_field tts_text)"
+    w="$(gl_field retry_window_s)"; [ -n "$w" ] && window="$w"
+  fi
+  end=$(( $(date +%s) + window ))
+  while [ "$(date +%s)" -lt "$end" ]; do
+    sleep 2
+    gl_request GET "/result/$rid"
+    [ "$GL_CODE" = 200 ] && break
+    [ "$GL_CODE" = 202 ] || [ "$GL_EXIT" = 28 ] || break
+  done
+fi
+if [ "$GL_CODE" = 200 ]; then
+  gl_field display_text; echo
+  sleep 0.4                       # half-duplex tail before speaking
+  gl_say "$(gl_field tts_text)"
+  if command -v termux-toast >/dev/null; then termux-toast "Answer ready"; fi
+  exit 0
+else
+  gl_err; exit 1
+fi

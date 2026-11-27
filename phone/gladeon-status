@@ -1,0 +1,8 @@
+#!/data/data/com.termux/files/usr/bin/bash
+. "$(dirname "$(readlink -f "$0")")/gladeon-lib.sh"
+gl_request GET /status
+[ "$GL_CODE" = 200 ] || { gl_err; exit 1; }
+printf '%s' "$GL_BODY" | jq -r '"State: \(.state)  Vault: \(.vault)  Auto-lock in: \(.auto_lock_in_s // "-") s",
+  "Engines: quick \(.engines.quick), deep \(.engines.deep), embed \(.engines.embed)",
+  "Index: \(.index.notes // 0) notes, \(.index.pending // 0) pending",
+  (if (.warnings|length) > 0 then "Warnings: \(.warnings|join(", "))" else empty end)' | gl_clean

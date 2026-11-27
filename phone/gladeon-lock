@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/bash
+. "$(dirname "$(readlink -f "$0")")/gladeon-lib.sh"
+gl_request POST /vault/lock <<< '{}'
+[ "$GL_CODE" = 202 ] && echo "Locking." || { gl_err; exit 1; }
