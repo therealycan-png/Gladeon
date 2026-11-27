@@ -12,6 +12,7 @@ class FakeLlama:
         self.requests = []
         self.cancelled = 0
         self.embed_fail = set()
+        self.embed_mode = "len"
         outer = self
 
         class H(BaseHTTPRequestHandler):
@@ -49,6 +50,12 @@ class FakeLlama:
                 if self.path == "/v1/embeddings":
                     if req["input"] in outer.embed_fail:
                         return self._json({"error": "bad input"}, 400)
+                    if outer.embed_mode == "bag":
+                        v = [0.0] * 26
+                        for ch in req["input"].casefold():
+                            if "a" <= ch <= "z":
+                                v[ord(ch) - 97] += 1
+                        return self._json({"data": [{"embedding": v}]})
                     return self._json({"data": [{"embedding": [1.0, 0.0, float(len(req["input"]))]}]})
                 pieces, delay = outer.replies.pop(0) if outer.replies else (["ok"], 0)
                 self.send_response(200)
