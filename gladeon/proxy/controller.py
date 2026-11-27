@@ -78,6 +78,7 @@ class Controller:
             command=self._command,
             deep_failed=lambda: self.deep_failed_this_boot,
             prepare_deep=self._prepare_deep,
+            deep_loadable=lambda: self._deep_loadable(),
         ))
         self.deep_failed_this_boot = False
         self.deep_mu = threading.Lock()
@@ -276,8 +277,12 @@ class Controller:
                 self.snapshot_due = True
             # the snapshot waits for a trusted clock and enough disk, then runs (14.2)
             if getattr(self, "snapshot_due", False) and self.clock_trusted and not low:
-                M.snapshot(b, os.path.join(self.cfg.vault_root, "backups"), True, int(self.wall()))
-                self.snapshot_due = False
+                self.snapshot_due = False                     # one try per day, even if it fails
+                try:
+                    M.snapshot(b, os.path.join(self.cfg.vault_root, "backups"), True, int(self.wall()))
+                except Exception as e:
+                    log.error("snapshot failed %s", type(e).__name__)
+                    self.warnings.add("SNAPSHOT_FAILED")
 
     # ---- search hooks for the pipeline -----------------------------------------------------
     def _search(self, text: str, floor_name: str):
@@ -440,24 +445,26 @@ class Controller:
             time.sleep(0.05)
         return self.s.engines.get(name) == "READY"
 
+    def _deep_loadable(self) -> bool:
+        return (self.s.engines.get("deep") != "READY" and not self.deep_failed_this_boot
+                and self.cfg.deep_plan != "unavailable")
+
     def _prepare_deep(self) -> Optional[float]:
+        """Runs with no pipeline lock and no request state held. Returns when the engine that will
+        answer (DEEP, or QUICK after a failed load) is READY, as a monotonic time."""
         self.last_deep_request = self.clock()
-        if self.s.engines.get("deep") == "READY":
-            return None
+        early = getattr(self._early, "fn", None)
+        if early is not None and self._deep_loadable():
+            early(R.deep_loading(int(self.cfg.load_seconds.get("deep", 60.0))))   # 202 for every waiter
         with self.deep_mu:                                    # one load at a time; others wait for it
-            if self.s.engines.get("deep") == "READY":
-                return self.clock()
+            if self.s.engines.get("deep") == "READY" or not self._deep_loadable():
+                return self.clock()                           # a load just finished (or just failed)
             return self._load_deep()
 
     def _load_deep(self) -> Optional[float]:
-        if self.deep_failed_this_boot or self.cfg.deep_plan == "unavailable":
-            return None
-        early = getattr(self._early, "fn", None)
-        secs = int(self.cfg.load_seconds.get("deep", 60.0))
-        if early is not None:
-            early(R.deep_loading(secs))                       # 202 with the loading reply
         if self.cfg.deep_plan == "swap" and self.s.engines.get("quick") == "READY":
-            self.pipeline._reset_followup()          # 12.3.5: wipe the follow-up on a DEEP swap
+            with self.pipeline.lock:                          # 12.3.5: wipe the follow-up on a DEEP swap
+                self.pipeline._reset_followup()
             self.privd.call("unit-stop", {"unit": "llm-quick"})
             self.set_engine("quick", "STOPPED")
         self.set_engine("deep", "LOADING")

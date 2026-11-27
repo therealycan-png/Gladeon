@@ -61,6 +61,35 @@ class EngineTest(unittest.TestCase):
         self.assertLess(time.monotonic() - t0, 1.0)
         srv.close()
 
+    def _raw_server(self, payload: bytes, hold: float = 0.0):
+        import socket as _s
+        import threading as _t
+        srv = _s.socket()
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+
+        def serve():
+            c, _ = srv.accept()
+            c.recv(65536)
+            c.sendall(payload)
+            time.sleep(hold)
+            c.close()
+            srv.close()
+        _t.Thread(target=serve, daemon=True).start()
+        return Engine("quick", "k", port=srv.getsockname()[1])
+
+    def test_content_length_early_eof_keeps_partial(self):
+        ev = b'data: {"choices":[{"delta":{"content":"Part one."}}]}\n\n'
+        e = self._raw_server(b"HTTP/1.1 200 OK\r\nContent-Length: 5000\r\n\r\n" + ev)
+        r = e.chat([], ChatParams("QUICK"), self.dl(5))
+        self.assertEqual(r.text, "Part one.")
+
+    def test_huge_chunk_rejected(self):
+        e = self._raw_server(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nFFFFFFF\r\n", hold=1)
+        t0 = time.monotonic()
+        self.assertRaises(EngineError, e.chat, [], ChatParams("QUICK"), self.dl(5))
+        self.assertLess(time.monotonic() - t0, 1.5)
+
     def test_auth_required(self):
         bad = Engine("quick", "wrong", port=self.f.port)
         self.assertRaises(EngineError, bad.chat, [], ChatParams("QUICK"), self.dl())

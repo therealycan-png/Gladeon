@@ -98,6 +98,42 @@ class DeepTest(tc.ControllerTest):
         self.assertEqual(res["route"], "BRAIN_RAG")
         self.assertEqual(self.units.count(("start", "llm-deep")), 1)
 
+    def test_lock_during_deep_load_sends_no_note_text(self):
+        self.unlock_ready()
+        self.ctl.set_engine("quick", "READY")
+        self.ctl.cfg.load_seconds = {"quick": 0.5, "deep": 1.0}
+        self.deep_comes_up = False                        # we bring DEEP up by hand after locking
+        res = {}
+        t = threading.Thread(target=lambda: res.update(
+            self.ctl.run_query("think harder what's my wifi password?", "auto", None)))
+        t.start()
+        time.sleep(0.2)                                   # DEEP is loading
+        self.ctl.lock()
+        self.assertTrue(tc.wait(lambda: self.ctl.s.vault == "LOCKED"))
+        self.ctl.set_engine("deep", "READY")
+        self.llama.replies.append((["Should not see notes."], 0))
+        t.join(10)
+        self.assertEqual(res["route"], "VAULT_LOCKED")
+        for path, body in self.llama.requests:
+            if path == "/v1/chat/completions":
+                self.assertNotIn("abc123", str(body))     # the password never reached the engine
+        self.assertEqual(self.ctl.pipeline._fu_hits, {})
+
+    def test_second_waiter_on_failed_load_gets_quick_answer(self):
+        self.deep_comes_up = False
+        self.llama.replies += [(["Grain one."], 0), (["Grain two."], 0)]
+        outs = []
+        ts = [threading.Thread(target=lambda: outs.append(self.ctl.run_query("think harder what is rice", "auto", None)))
+              for _ in range(2)]
+        for t in ts:
+            t.start()
+        for t in ts:
+            t.join(15)
+        self.assertEqual(len(outs), 2)
+        for o in outs:
+            self.assertTrue(o["display_text"].startswith(R.DEEP_UNAVAILABLE_PREFIX), o["display_text"])
+        self.assertEqual(self.units.count(("start", "llm-deep")), 1)
+
     def test_processing_reply_with_partial_load_seconds(self):
         self.ctl.cfg.load_seconds = {"quick": 45}
         self.assertEqual(self.ctl.processing_reply()["retry_window_s"], int(2 * 60 + 200 + 10))

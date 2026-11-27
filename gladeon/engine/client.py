@@ -292,10 +292,24 @@ class _Stream:
 
     def lines(self, chunked: bool, length: Optional[int] = None):
         if not chunked and length is not None:       # a plain body: exactly Content-Length bytes
-            if length > self.MAX_LINE:
-                raise EngineError("body too long")
-            for ln in self._exact(length).splitlines(keepends=True):
-                yield ln
+            left = length
+            while left > 0:
+                while b"\n" not in self.buf[:left]:
+                    if len(self.buf) >= left:
+                        break
+                    if len(self.buf) > self.MAX_LINE:
+                        raise EngineError("line too long")
+                    if not self._fill():             # early EOF: hand over what arrived
+                        if self.buf:
+                            out, self.buf = self.buf[:left], b""
+                            yield out
+                        return
+                seg = self.buf[:left]
+                cut = seg.find(b"\n")
+                n = cut + 1 if cut >= 0 else len(seg)
+                out, self.buf = self.buf[:n], self.buf[n:]
+                left -= n
+                yield out
             return
         if not chunked:
             while True:
@@ -319,10 +333,12 @@ class _Stream:
                 if body:
                     yield body
                 return
+            if size > self.MAX_LINE:
+                raise EngineError("chunk too large")
             body += self._exact(size)
             self._exact(2)                   # CRLF after each chunk
-            if len(body) > self.MAX_LINE and b"\n" not in body:
-                raise EngineError("line too long")
             while b"\n" in body:
                 ln, body = body.split(b"\n", 1)
                 yield ln + b"\n"
+            if len(body) > self.MAX_LINE:
+                raise EngineError("line too long")

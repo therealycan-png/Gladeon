@@ -30,6 +30,9 @@ class Busy(Exception):
     status, code = 503, "BUSY"
 
 
+_NEEDS_DEEP = object()
+
+
 class EngineLoading(Exception):
     """The request needs a chat engine and none is READY (e.g. QUICK stopped for a DEEP swap): 503 LOADING."""
     status, code = 503, "LOADING"
@@ -59,6 +62,8 @@ class Deps:
     # Called once routing knows a DEEP request needs a chat engine (8.3). Returns the monotonic time
     # the engine that will answer became READY (the deadline counts from max(start, that)), or None.
     prepare_deep: Callable[[], Optional[float]] = lambda: None
+    # True when DEEP is not READY but a load may be attempted (plan allows, not failed this boot)
+    deep_loadable: Callable[[], bool] = lambda: False
     pronunciation: str = "Glad-eon"
     clock: Callable[[], float] = time.monotonic
 
@@ -130,14 +135,26 @@ class Pipeline:
     def handle(self, transcript: str, body_mode: str = "auto", start: Optional[float] = None) -> Reply:
         """One conversation at a time; a second request waits at most 5 s, then BUSY (8.5)."""
         start = self.d.clock() if start is None else start
-        if not self.lock.acquire(timeout=BUSY_WAIT_S):
-            raise Busy()
-        try:
-            return self._handle(transcript, body_mode, start)
-        finally:
-            self.lock.release()
+        ready_at = None
+        for attempt in (1, 2):
+            if not self.lock.acquire(timeout=BUSY_WAIT_S):
+                raise Busy()
+            try:
+                out = self._handle(transcript, body_mode, start, ready_at, allow_load=attempt == 1)
+            finally:
+                self.lock.release()
+            if out is not _NEEDS_DEEP:
+                return out
+            # A DEEP request needs the engine loaded. Load it holding NO request state (no hits,
+            # no follow-up, no note text) and no pipeline lock, then re-run the request from
+            # scratch: routing is deterministic, so a lock or new note during the load is honored.
+            ready_at = self.d.prepare_deep()
+            if ready_at is None:
+                ready_at = self.d.clock()
+        raise EngineLoading()
 
-    def _handle(self, transcript: str, body_mode: str, start: float) -> Reply:
+    def _handle(self, transcript: str, body_mode: str, start: float, ready_at: Optional[float] = None,
+                allow_load: bool = True):
         warnings: list = []
         hits_map: dict = dict(self._fu_hits)      # this request only; follow-up hits carried explicitly
 
@@ -174,24 +191,18 @@ class Pipeline:
         if r == RT.STILL_READING:
             return self._fixed(r, mode, R.still_reading(self.d.still_reading_n()), warnings)
 
-        # snapshot the follow-up before the lock can be released for a DEEP load
+        if mode == "deep" and allow_load and self.d.deep_loadable():
+            return _NEEDS_DEEP                        # drops hits_map; handle() loads, then re-runs
         sticky = fu is not None and rr.route == fu.route
         fu_snap = copy.deepcopy(fu) if sticky else None
         turns = list(fu.turns) if sticky else []
-        if mode == "deep":
-            # the DEEP load can take minutes: let other requests (fixed replies) through meanwhile
-            self.lock.release()
-            try:
-                ready_at = self.d.prepare_deep()
-            finally:
-                self.lock.acquire()
-            if ready_at is not None:
-                base = max(start, ready_at)
-                # answered by DEEP: 200 s; fell back to QUICK: its own 60 s from QUICK READY (8.3)
-                deadline = base + (DEADLINE_S["deep"] if self.d.engine_ready("deep") else DEADLINE_S["quick"])
         eng, prefix = self._engine_for(mode, warnings)
         if eng is None:
             raise EngineLoading()
+        if mode == "deep":
+            # DEEP: 200 s from max(start, DEEP READY); answered on QUICK instead: 60 s from QUICK READY
+            base = max(start, ready_at) if ready_at is not None else start
+            deadline = base + (DEADLINE_S["deep"] if eng == "deep" else DEADLINE_S["quick"])
         question = text
         if r == RT.BRAIN_RAG:
             rep = self._brain(rr, hits_map, text, turns, mode, eng, deadline, warnings, fu_snap)

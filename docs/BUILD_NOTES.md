@@ -76,3 +76,11 @@ The second review looked only at the round-1 fix commit and found 7 problems ins
 5. A refused request was briefly registered, so a quick retry could get 202 and then 404. Refusals are no longer registered.
 6. The stream reader ignored Content-Length, and could wait out the deadline on a non-streamed reply. It now reads exactly Content-Length bytes, limits chunked lines, and hands over partial data on early EOF.
 7. `/preflight` passed the clock check when privd was unreachable. It now fails it.
+
+## Code review, round 3 (on the round-2 fixes)
+
+Round 3 found 8 more problems, nearly all in the DEEP-load concurrency added in rounds 1 and 2: note text that could outlive a lock, a second waiter getting no QUICK window, follow-up turns lost or mixed, and an unlocked follow-up reset. The cause was the design itself: the request released the pipeline lock halfway and the code then patched shared state around that.
+
+**Replaced with a simpler design.** A DEEP request that needs the engine loaded now gives up everything it holds (hits, follow-up, note text), releases the lock, waits for the load, and then **re-runs from scratch**. Routing is deterministic, so the re-run is correct. A lock during the load is honored naturally (the re-run sees a locked vault and answers "Vault is locked."), and no note text is held across the wait. A test now asserts that the password never reaches the engine when the vault is locked mid-load.
+
+Also fixed in this round: Content-Length bodies are read line by line, with partial data kept on early EOF; chunk sizes are bounded before buffering; a failing snapshot is tried once a day with a `SNAPSHOT_FAILED` warning; and every DEEP waiter gets the loading notice.
