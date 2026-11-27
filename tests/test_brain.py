@@ -183,7 +183,7 @@ class ScanGateTest(unittest.TestCase):
 
         def fake(a, b):
             calls[0] += 1
-            t[0] += 1e-5
+            t[0] += 0.99e-5
             return 0
         I.math.sumprod = fake
         try:
