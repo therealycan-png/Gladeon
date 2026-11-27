@@ -7,7 +7,7 @@ pkg install curl jq termux-api
 mkdir -p ~/.gladeon && chmod 700 ~/.gladeon
 ```
 
-Copy these files into `~/.gladeon/` from the client bundle (`gladeon-admin client-bundle`, spec 3.3.7):
+Import the client bundle: `gladeon-bundle bundle.armored <pin from hardware.md>`. It checks the hash and the pin, writes these files to `~/.gladeon/` (mode `0600`) and deletes the armored file:
 
 | File | Contents |
 |---|---|
@@ -23,6 +23,7 @@ The token is read by curl from `auth.header` and the passphrase goes through std
 | `gladeon-unlock` | asks for the vault passphrase without echo |
 | `gladeon-lock` | locks the vault |
 | `gladeon-status` | short status |
+| `gladeon-bundle FILE [PIN]` | imports the client bundle |
 | `gladeon-shutdown [--reboot]` | asks you to type SHUTDOWN or REBOOT first |
 
 Put shortcuts in `~/.shortcuts/` for the Termux:Widget home-screen buttons.

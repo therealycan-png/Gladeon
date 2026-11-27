@@ -1,0 +1,24 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Import the client bundle: gladeon-bundle bundle.armored [expected-pin]
+# Checks the SHA-256 line and (if given) the pin from the admin USB / hardware.md, writes ~/.gladeon/
+# with mode 0600, then deletes the armored file (3.3.7).
+set -u
+f="${1:?usage: gladeon-bundle FILE [PIN]}"; want_pin="${2:-}"
+dir="${GLADEON_DIR:-$HOME/.gladeon}"
+tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+tr -d '\r' < "$f" > "$tmp/a"
+sed -n '/^-----BEGIN GLADEON BUNDLE-----$/,/^-----END GLADEON BUNDLE-----$/p' "$tmp/a" | sed '1d;$d' | tr -d '\n' > "$tmp/b64"
+base64 -d < "$tmp/b64" > "$tmp/data" 2>/dev/null || { echo "Bundle is damaged." >&2; exit 1; }
+want="$(sed -n 's/^SHA256: \([0-9a-f]\{64\}\)$/\1/p' "$tmp/a")"
+have="$(sha256sum "$tmp/data" | cut -d' ' -f1)"
+[ -n "$want" ] && [ "$want" = "$have" ] || { echo "Bundle hash does not match." >&2; exit 1; }
+pin="$(jq -r '.pin' < "$tmp/data")"
+if [ -n "$want_pin" ] && [ "$pin" != "$want_pin" ]; then echo "Pin differs from the recorded one. Refusing." >&2; exit 1; fi
+umask 077
+mkdir -p "$dir"; chmod 700 "$dir"
+jq -r '."cert.pem"' < "$tmp/data" > "$dir/cert.pem"
+printf 'Authorization: Bearer %s\n' "$(jq -r '.token' < "$tmp/data")" > "$dir/auth.header"
+jq -r '"PC_IP_ETH=\(.pc_ip_eth)\nPC_IP_WLAN=\(.pc_ip_wlan)\nSPKI_PIN=\(.pin)\nPORT=\(.port)"' < "$tmp/data" > "$dir/config"
+chmod 600 "$dir/cert.pem" "$dir/auth.header" "$dir/config"
+rm -f "$f"
+echo "Bundle imported. Pin: $pin"

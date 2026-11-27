@@ -79,6 +79,37 @@ class PhoneScriptsTest(unittest.TestCase):
         r = self.run_script("gladeon-shutdown", stdin="SHUTDOWN\n")
         self.assertEqual(r.returncode, 0, r.stderr)
 
+    def test_bundle_roundtrip(self):
+        import io
+        import json as _json
+        from gladeon.admin.main import client_bundle
+        conf = os.path.join(self.d.name, "proxy.json")
+        tok = os.path.join(self.d.name, "tok")
+        with open(tok, "w") as f:
+            f.write(TOKEN)
+        with open(conf, "w") as f:
+            _json.dump({"cert": os.path.join(self.g, "cert.pem"), "token_file": tok, "port": self.srv.port,
+                        "pc_ips": {"eth": "127.0.0.1", "wlan": "127.0.0.1"}}, f)
+        buf = io.StringIO()
+        client_bundle(conf, buf)
+        fresh = os.path.join(self.d.name, "fresh")
+        armored = os.path.join(self.d.name, "bundle.armored")
+        with open(armored, "w") as f:
+            f.write(buf.getvalue().replace("\n", "\r\n"))
+        env = dict(os.environ, GLADEON_DIR=fresh, PATH="/usr/bin:/bin")
+        bad = subprocess.run(["bash", os.path.join(PHONE, "gladeon-bundle"), armored, "WRONGPIN="], env=env,
+                             capture_output=True, text=True)
+        self.assertNotEqual(bad.returncode, 0)
+        self.assertTrue(os.path.exists(armored))
+        ok = subprocess.run(["bash", os.path.join(PHONE, "gladeon-bundle"), armored], env=env,
+                            capture_output=True, text=True)
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+        self.assertFalse(os.path.exists(armored))
+        self.assertEqual(oct(os.stat(os.path.join(fresh, "auth.header")).st_mode & 0o777), "0o600")
+        r = subprocess.run(["bash", os.path.join(PHONE, "gladeon-status")], env=env, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("FULL_READY", r.stdout)
+
     def test_wrong_pin_refused(self):
         bad = os.path.join(self.d.name, "bad")
         shutil.copytree(self.g, bad)
