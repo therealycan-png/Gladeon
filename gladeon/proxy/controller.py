@@ -314,6 +314,63 @@ class Controller:
             else:
                 self.s.vault, self.s.vault_last_error = "LOCK_FAILED", r.name
 
+    # ---- reconciliation at proxy start (6.3.5) --------------------------------------------
+    def reconcile(self, busy_retry_s: float = 0.5, max_wait_s: float = 600) -> str:
+        st = self.privd.call("vault-status")
+        if not st.ok:
+            self.s.vault, self.s.vault_last_error = "LOCKED", st.name
+            return "privd-error"
+        d = st.data
+        if d.get("lock_holder") in ("vault-open", "vault-setup", "vault-erase"):
+            self.privd.call("lock-intent-set")
+            self._close_retrying(busy_retry_s, max_wait_s)
+            return "closed-after-open"
+        if d.get("lock_intent") and d.get("mapping_open"):
+            self.s.vault = "LOCKING"
+            self._lock_job()
+            return "resumed-lock"
+        if d.get("mounted") and d.get("id_ok") and not d.get("lock_intent"):
+            saved = self._saved_activity()
+            if saved is None:
+                self.s.vault = "READY"
+                self._lock_job()
+                return "locked-no-activity"
+            self.s.vault = "RECOVERING"
+            try:
+                self._open_brain()
+            except Exception as e:
+                log.error("adopt failed %s", type(e).__name__)
+                self.s.vault = "LOCKING"
+                self._lock_job()
+                return "locked-adopt-failed"
+            self.privd.call("unit-start", {"unit": "llm-embed"})
+            self.last_activity = saved
+            self.s.vault = "READY"
+            return "adopted"
+        if d.get("mapping_open"):
+            self._close_retrying(busy_retry_s, max_wait_s)
+            return "closed-half-open"
+        self.s.vault = "LOCKED"
+        return "locked"
+
+    def _close_retrying(self, retry_s: float, max_wait_s: float) -> None:
+        end = self.clock() + max_wait_s
+        while True:
+            r = self.privd.call("vault-close", deadline_s=60)
+            if r.name != "PRIVD_BUSY" or self.clock() >= end:
+                break
+            time.sleep(retry_s)
+        self.s.vault = "LOCKED" if r.ok else "LOCK_FAILED"
+        if not r.ok:
+            self.s.vault_last_error = r.name
+
+    def _saved_activity(self):
+        try:
+            with open(os.path.join(self.cfg.run_dir, "last_activity")) as f:
+                return float(f.read().strip())
+        except (OSError, ValueError):
+            return None
+
     # ---- /query ----------------------------------------------------------------------------
     def query_blocked(self, mode: str):
         return query_blocked(self.s)

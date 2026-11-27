@@ -98,6 +98,7 @@ def main(argv=None) -> int:
 
     for fn in (health_loop, timer_loop):
         threading.Thread(target=fn, name=fn.__name__, daemon=True).start()
+    threading.Thread(target=ctl.reconcile, name="reconcile", daemon=True).start()   # 7.1.4
     ctl.privd.call("unit-start", {"unit": "llm-quick"})
     while not stop.wait(5):
         if not live.stale():
