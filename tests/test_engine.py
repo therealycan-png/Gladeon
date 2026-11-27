@@ -38,6 +38,29 @@ class EngineTest(unittest.TestCase):
         r = self.e.chat([], ChatParams("QUICK"), self.dl())
         self.assertEqual((r.text, r.finish_reason), ("Hello there.", "stop"))
 
+    def test_non_stream_body_with_content_length(self):
+        """A non-streamed 200 with Content-Length on a kept-alive socket returns at once (review r2)."""
+        import socket as _s
+        import threading as _t
+        srv = _s.socket()
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        body = b'data: {"choices":[{"delta":{"content":"Hi."},"finish_reason":"stop"}]}\n\n'
+
+        def serve():
+            c, _ = srv.accept()
+            c.recv(65536)
+            c.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: " + str(len(body)).encode() + b"\r\n\r\n" + body)
+            time.sleep(3)                       # keep the socket open
+            c.close()
+        _t.Thread(target=serve, daemon=True).start()
+        e = Engine("quick", "k", port=srv.getsockname()[1])
+        t0 = time.monotonic()
+        r = e.chat([], ChatParams("QUICK"), self.dl(10))
+        self.assertEqual(r.text, "Hi.")
+        self.assertLess(time.monotonic() - t0, 1.0)
+        srv.close()
+
     def test_auth_required(self):
         bad = Engine("quick", "wrong", port=self.f.port)
         self.assertRaises(EngineError, bad.chat, [], ChatParams("QUICK"), self.dl())

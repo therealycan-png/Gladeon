@@ -68,7 +68,9 @@ def disk_check(path: str = "/", floor: int = DISK_FLOOR_BYTES) -> Check:
     return Check("DISK_ROOT", "PASS" if free >= floor else "FAIL", f"{free // (1024 ** 2)} MB free")
 
 
-def clock_check(now_epoch: int, floor: int) -> Check:
+def clock_check(now_epoch: int, floor: Optional[int]) -> Check:
+    if floor is None:
+        return Check("CLOCK", "FAIL", "privd unreachable; floor unknown")
     return Check("CLOCK", "PASS" if now_epoch >= floor else "WARN", "" if now_epoch >= floor else "CLOCK_UNTRUSTED")
 
 
@@ -104,7 +106,7 @@ def postfilter_check(control_tokens: Iterable[str], corpus: Iterable[str]) -> Ch
 
 
 def run_all(cert: str, pc_ips: Iterable[str], control_tokens: Iterable[str], corpus: Iterable[str],
-            floor_epoch: int, now_epoch: int) -> list[dict]:
+            floor_epoch: Optional[int], now_epoch: int) -> list[dict]:
     checks = [sqlite_check(), tls_check(cert, pc_ips), disk_check("/"), clock_check(now_epoch, floor_epoch),
               iface_check(), postfilter_check(control_tokens, corpus)]
     return [asdict(c) for c in checks]

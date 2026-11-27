@@ -75,6 +75,33 @@ class DeepTest(tc.ControllerTest):
         self.ctl.engine_restart("deep")
         self.assertFalse(self.ctl.deep_failed_this_boot)
 
+    def test_deep_notes_question_keeps_hits_through_swap(self):
+        self.unlock_ready()
+        self.ctl.set_engine("quick", "READY")
+        self.llama.replies.append((["Your wifi password is abc123."], 0))
+        out = self.ctl.run_query("think harder what's my wifi password?", "auto", None)
+        self.assertEqual((out["route"], out["mode"]), ("BRAIN_RAG", "deep"))
+        self.assertEqual(out["display_text"], "Your wifi password is abc123.")
+
+    def test_request_during_deep_load_does_not_clobber(self):
+        self.unlock_ready()
+        self.ctl.set_engine("quick", "READY")
+        self.llama.replies.append((["Your wifi password is abc123."], 0))
+        res = {}
+        t = threading.Thread(target=lambda: res.update(
+            self.ctl.run_query("think harder what's my wifi password?", "auto", None)))
+        t.start()
+        time.sleep(0.1)                                   # DEEP is loading now; the pipeline lock is free
+        other = self.ctl.run_query("lock the vault vault hint", "auto", None)
+        self.assertEqual(other["route"], "LOCK_HINT")    # a fixed reply is answered meanwhile
+        t.join(10)
+        self.assertEqual(res["route"], "BRAIN_RAG")
+        self.assertEqual(self.units.count(("start", "llm-deep")), 1)
+
+    def test_processing_reply_with_partial_load_seconds(self):
+        self.ctl.cfg.load_seconds = {"quick": 45}
+        self.assertEqual(self.ctl.processing_reply()["retry_window_s"], int(2 * 60 + 200 + 10))
+
     def test_fixed_routes_never_start_deep(self):
         out = self.ctl.run_query("think harder how much did I spend on GCash", "auto", None)
         self.assertEqual(out["route"], "FINANCE_DEFERRED")

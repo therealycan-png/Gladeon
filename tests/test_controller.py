@@ -112,8 +112,8 @@ class ControllerTest(unittest.TestCase):
         self.assertTrue(wait(lambda: self.ctl.s.vault == "LOCKED"))
         self.assertEqual(self.cache.lookup(rid).payload["route"], "VAULT_LOCKED")   # P14
         self.assertIsNone(self.ctl.brain)
-        self.assertEqual(self.ctl.pipeline._hits, {})          # no note text kept after lock
-        self.assertEqual(self.ctl.pipeline._fu_hits, {})
+        self.assertEqual(self.ctl.pipeline._fu_hits, {})         # no note text kept after lock
+        self.assertFalse(hasattr(self.ctl.pipeline, "_hits"))
         self.assertEqual(self.calls[-2:], ["unit-stop", "vault-close"])
         self.assertLess(self.calls.index("lock-intent-set"), self.calls.index("vault-close"))
         out = self.ctl.run_query("What's my wifi password?", "auto", None)
@@ -164,8 +164,7 @@ class ControllerTest(unittest.TestCase):
         self.ctl.maintenance_tick()                              # clock untrusted: no snapshot
         self.assertFalse(os.path.exists(os.path.join(self.vault, "backups")) and
                          os.listdir(os.path.join(self.vault, "backups")))
-        self.ctl.clock_trusted = True
-        self.ctl.last_daily = -1e18
+        self.ctl.clock_trusted = True                            # becomes trusted later the same day
         self.ctl.maintenance_tick()
         self.assertTrue(self.ctl.status()["index"]["calibrated"])
         self.assertNotIn("INDEX_UNCALIBRATED", self.ctl.status()["warnings"])

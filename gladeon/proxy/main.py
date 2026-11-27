@@ -60,14 +60,15 @@ def main(argv=None) -> int:
                             run_dir=conf.get("run_dir", "/run/gladeon-proxy"),
                             emb_key=conf.get("emb_key", "embed@0@0@0"), profiles=profiles,
                             deep_plan=conf.get("deep_plan", "unavailable"),
-                            load_seconds=conf.get("load_seconds", {"quick": 60.0, "deep": 60.0})),
+                            load_seconds={"quick": 60.0, "deep": 60.0, **conf.get("load_seconds", {})}),
                      PrivdClient(conf.get("privd_socket", "/run/gladeon/privd.sock")), engines, cache)
     srv = Server(conf.get("listen", "0.0.0.0"), int(conf.get("port", 8443)),
                  tls_context(conf["cert"], conf["key"]), token, phone_ips, App(ctl, cache))
     from .. import preflight as PF
     ips = conf.get("pc_ips", {})
     def run_preflight():
-        floor = int(ctl.privd.call("vault-status").data.get("floor") or 0)    # privd's floor, not 0
+        st = ctl.privd.call("vault-status")
+        floor = int(st.data.get("floor") or 0) if st.ok else None       # None: privd unreachable -> FAIL
         return PF.run_all(conf["cert"], [ips.get("eth", ""), ips.get("wlan", "")],
                           profiles["quick"].control_tokens, [], floor, int(time.time()))
     ctl.preflight_fn = run_preflight

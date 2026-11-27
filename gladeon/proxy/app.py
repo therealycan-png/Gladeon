@@ -88,15 +88,17 @@ class App:
         if not isinstance(transcript, str) or mode not in ("auto", "quick", "deep") or \
                 (epoch is not None and not isinstance(epoch, int)):
             raise HttpError(400, "BAD_REQUEST")
-        if not self.cache.begin(rid):               # dedup (11.3), atomic: 202 while running, cached after
+        known = self.cache.lookup(rid)              # dedup (11.3): cached reply or 202 while running
+        if known is not None:
+            return (known.status, known.payload) if known.state == "done" else (202, self.ctl.processing_reply())
+        blocked = self.ctl.query_blocked(mode)      # refusals are not registered, so a retry re-checks
+        if blocked:
+            return blocked[0], err(blocked[1])
+        if not self.cache.begin(rid):               # atomic: a concurrent twin already registered it
             known = self.cache.lookup(rid)
             if known is not None and known.state == "done":
                 return known.status, known.payload
             return 202, self.ctl.processing_reply()
-        blocked = self.ctl.query_blocked(mode)
-        if blocked:
-            self.cache.forget(rid)
-            return blocked[0], err(blocked[1])
         ev = threading.Event()
         self._done[rid] = ev
 

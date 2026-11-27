@@ -139,6 +139,18 @@ class ServerTest(unittest.TestCase):
         self.assertEqual((s, b["display_text"]), (200, "SLOW"))
         c.close()
 
+    def test_blocked_query_not_registered(self):
+        from gladeon.proxy.httpcore import Request
+        ctl = FakeCtl()
+        ctl.query_blocked = lambda mode: (503, "LOADING")
+        app = App(ctl, sync_wait_s=0.5)
+        rid = str(uuid.uuid4())
+        req = Request("POST", "/query", {"x-request-id": rid}, b'{"transcript": "hi"}')
+        self.assertEqual(app(req)[0], 503)
+        self.assertIsNone(app.cache.lookup(rid))
+        ctl.query_blocked = lambda mode: None                # recovered: the retry runs normally
+        self.assertEqual(app(req)[0], 200)
+
     def test_app_shares_the_given_cache(self):
         from gladeon.proxy.reqcache import RequestCache
         c = RequestCache()

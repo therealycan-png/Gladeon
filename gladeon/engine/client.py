@@ -185,7 +185,9 @@ class Engine:
             status, headers = rd.read_head()
             if status != 200:
                 raise EngineError(f"HTTP {status}")
-            for line in rd.lines(chunked="chunked" in headers.get("transfer-encoding", "").lower()):
+            cl = headers.get("content-length")
+            for line in rd.lines(chunked="chunked" in headers.get("transfer-encoding", "").lower(),
+                                 length=int(cl) if cl and cl.isdigit() else None):
                 line = line.strip()
                 if not line.startswith(b"data:"):
                     continue
@@ -288,7 +290,13 @@ class _Stream:
             k, _, v = line.decode("latin-1").partition(":")
             headers[k.strip().lower()] = v.strip()
 
-    def lines(self, chunked: bool):
+    def lines(self, chunked: bool, length: Optional[int] = None):
+        if not chunked and length is not None:       # a plain body: exactly Content-Length bytes
+            if length > self.MAX_LINE:
+                raise EngineError("body too long")
+            for ln in self._exact(length).splitlines(keepends=True):
+                yield ln
+            return
         if not chunked:
             while True:
                 ln = self._line()
@@ -300,6 +308,8 @@ class _Stream:
         while True:
             size_line = self._line()
             if size_line is None:
+                if body:
+                    yield body                  # early EOF: hand over what arrived
                 return
             try:
                 size = int(size_line.split(b";")[0].strip() or b"0", 16)
@@ -311,6 +321,8 @@ class _Stream:
                 return
             body += self._exact(size)
             self._exact(2)                   # CRLF after each chunk
+            if len(body) > self.MAX_LINE and b"\n" not in body:
+                raise EngineError("line too long")
             while b"\n" in body:
                 ln, body = body.split(b"\n", 1)
                 yield ln + b"\n"

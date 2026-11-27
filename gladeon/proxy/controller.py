@@ -80,6 +80,7 @@ class Controller:
             prepare_deep=self._prepare_deep,
         ))
         self.deep_failed_this_boot = False
+        self.deep_mu = threading.Lock()
         self.last_deep_request = -1e18
         self._early = threading.local()
 
@@ -272,8 +273,11 @@ class Controller:
             if self.clock() - getattr(self, "last_daily", -1e18) >= 86400:
                 self.last_daily = self.clock()
                 M.daily(b, key_change_complete=b.pending_count() == 0)
-                if not low:
-                    M.snapshot(b, os.path.join(self.cfg.vault_root, "backups"), self.clock_trusted, int(self.wall()))
+                self.snapshot_due = True
+            # the snapshot waits for a trusted clock and enough disk, then runs (14.2)
+            if getattr(self, "snapshot_due", False) and self.clock_trusted and not low:
+                M.snapshot(b, os.path.join(self.cfg.vault_root, "backups"), True, int(self.wall()))
+                self.snapshot_due = False
 
     # ---- search hooks for the pipeline -----------------------------------------------------
     def _search(self, text: str, floor_name: str):
@@ -440,19 +444,25 @@ class Controller:
         self.last_deep_request = self.clock()
         if self.s.engines.get("deep") == "READY":
             return None
+        with self.deep_mu:                                    # one load at a time; others wait for it
+            if self.s.engines.get("deep") == "READY":
+                return self.clock()
+            return self._load_deep()
+
+    def _load_deep(self) -> Optional[float]:
         if self.deep_failed_this_boot or self.cfg.deep_plan == "unavailable":
             return None
         early = getattr(self._early, "fn", None)
-        secs = int(self.cfg.load_seconds["deep"])
+        secs = int(self.cfg.load_seconds.get("deep", 60.0))
         if early is not None:
             early(R.deep_loading(secs))                       # 202 with the loading reply
         if self.cfg.deep_plan == "swap" and self.s.engines.get("quick") == "READY":
-            self.pipeline.wipe()                     # 12.3.5: wipe on DEEP swap
+            self.pipeline._reset_followup()          # 12.3.5: wipe the follow-up on a DEEP swap
             self.privd.call("unit-stop", {"unit": "llm-quick"})
             self.set_engine("quick", "STOPPED")
         self.set_engine("deep", "LOADING")
         self.privd.call("unit-start", {"unit": "llm-deep"})
-        if self.wait_engine("deep", 2 * self.cfg.load_seconds["deep"]):
+        if self.wait_engine("deep", 2 * self.cfg.load_seconds.get("deep", 60.0)):
             return self.clock()
         # failure or timeout: stop DEEP, back to QUICK, answer there with the prefix (8.3)
         self.deep_failed_this_boot = True
@@ -461,7 +471,7 @@ class Controller:
         self.set_engine("deep", "FAILED")
         if self.s.engines.get("quick") != "READY":
             self.privd.call("unit-start", {"unit": "llm-quick"})
-            self.wait_engine("quick", 2 * self.cfg.load_seconds["quick"])
+            self.wait_engine("quick", 2 * self.cfg.load_seconds.get("quick", 60.0))
         return self.clock()
 
     def deep_idle_tick(self) -> None:
@@ -546,7 +556,7 @@ class Controller:
 
     def processing_reply(self) -> dict:
         ls = self.cfg.load_seconds
-        window = int(2 * ls["deep"] + max(200, ls["quick"] + 60) + 10)     # 8.6.3
+        window = int(2 * ls.get("deep", 60.0) + max(200, ls.get("quick", 60.0) + 60) + 10)     # 8.6.3
         return {"schema": SCHEMA, "status": "PROCESSING", "display_text": "Working on it.",
                 "tts_text": "Working on it.", "retry_window_s": window}
 

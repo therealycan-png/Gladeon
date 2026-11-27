@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import threading
 import time
+import copy
 from dataclasses import dataclass, field
 from typing import Callable, Optional, Sequence
 
@@ -76,15 +77,15 @@ class Pipeline:
     def __init__(self, deps: Deps):
         self.d = deps
         self.followup = RT.FollowUp()
-        self._hits: dict = {}          # this request's hits (chunk id -> Hit)
         self._fu_hits: dict = {}       # hits behind followup.chunk_ids, kept only as long as the follow-up
+        # a request's own hits live in a local dict passed down the call chain, never on self, so a
+        # request that runs while another waits for DEEP cannot clobber them (review round 2)
         self.lock = threading.Lock()   # one conversation; the proxy serializes chat anyway
 
     # ---- helpers ---------------------------------------------------------------------------
     def wipe(self) -> None:
         """Drop all conversation state and any note text held in memory (lock, 12.3.5)."""
         self._reset_followup()
-        self._hits = {}
 
     def _reset_followup(self) -> None:
         self.followup.wipe()
@@ -98,12 +99,6 @@ class Pipeline:
         else:
             self.wipe()
         return Reply(route, mode, pair[0], pair[1], list(warnings))
-
-    def _search_ids(self, text: str, floor_name: str) -> list:
-        hits = self.d.search(text, floor_name)
-        for h in hits:
-            self._hits[h.chunk_id] = h
-        return [h.chunk_id for h in hits]
 
     def _engine_for(self, mode: str, warnings: list) -> tuple[Optional[str], str]:
         """Returns (engine name or None, display prefix)."""
@@ -140,12 +135,17 @@ class Pipeline:
         try:
             return self._handle(transcript, body_mode, start)
         finally:
-            self._hits = {}                       # note text from this request is not kept
             self.lock.release()
 
     def _handle(self, transcript: str, body_mode: str, start: float) -> Reply:
         warnings: list = []
-        self._hits = dict(self._fu_hits)          # per request; follow-up hits carried explicitly
+        hits_map: dict = dict(self._fu_hits)      # this request only; follow-up hits carried explicitly
+
+        def search_ids(q: str, floor_name: str) -> list:
+            hs = self.d.search(q, floor_name)
+            for h in hs:
+                hits_map[h.chunk_id] = h
+            return [h.chunk_id for h in hs]
         n = normalize(transcript, body_mode)
         mode = n.mode
         if n.empty:
@@ -158,7 +158,7 @@ class Pipeline:
         fu = self.followup if self.followup.active(self.d.clock()) else None
         if fu is None and self.followup.route is not None:
             self.wipe()
-        rr = RT.route(text, search_text, self.d.vault_ready(), self._search_ids,
+        rr = RT.route(text, search_text, self.d.vault_ready(), search_ids,
                       self.d.partial_transient, fu, self.d.clock())
         r = rr.route
         if r == RT.LOCAL_COMMAND:
@@ -174,6 +174,10 @@ class Pipeline:
         if r == RT.STILL_READING:
             return self._fixed(r, mode, R.still_reading(self.d.still_reading_n()), warnings)
 
+        # snapshot the follow-up before the lock can be released for a DEEP load
+        sticky = fu is not None and rr.route == fu.route
+        fu_snap = copy.deepcopy(fu) if sticky else None
+        turns = list(fu.turns) if sticky else []
         if mode == "deep":
             # the DEEP load can take minutes: let other requests (fixed replies) through meanwhile
             self.lock.release()
@@ -188,11 +192,9 @@ class Pipeline:
         eng, prefix = self._engine_for(mode, warnings)
         if eng is None:
             raise EngineLoading()
-        sticky = fu is not None and rr.route == fu.route
-        turns = list(fu.turns) if sticky else []
         question = text
         if r == RT.BRAIN_RAG:
-            rep = self._brain(rr, text, turns, mode, eng, deadline, warnings, fu if sticky else None)
+            rep = self._brain(rr, hits_map, text, turns, mode, eng, deadline, warnings, fu_snap)
         else:
             rep = self._general(question, turns, mode, eng, deadline, warnings, r)
         if prefix and rep.route not in (RT.NOT_IN_NOTES,) and rep.display_text not in (R.OUT_OF_TIME[0], R.ENGINE_EMPTY[0]):
@@ -210,10 +212,11 @@ class Pipeline:
         return self._finish(a, route, mode, question, warnings, [], store_route=RT.GENERAL_CHAT)
 
     # ---- BRAIN -----------------------------------------------------------------------------
-    def _brain(self, rr, text: str, turns, mode: str, eng: str, deadline: float, warnings: list, fu) -> Reply:
+    def _brain(self, rr, hits_map: dict, text: str, turns, mode: str, eng: str, deadline: float,
+               warnings: list, fu) -> Reply:
         prof = self.d.profiles[eng]
         ids = list(rr.hits)
-        hits = [self._hits[i] for i in ids if i in self._hits]
+        hits = [hits_map[i] for i in ids if i in hits_map]
         ct = self.d.count_tokens
         pcs = [PromptChunk(h.rank_date, h.title, _crumb(h.header), h.body) for h in hits]
         sys_tokens = ct(build_brain("", [], (), mode).messages[0]["content"])
@@ -252,7 +255,7 @@ class Pipeline:
             self.followup.chunk_ids = used_ids
             self.followup.fallback_eligible = rr.fallback_eligible
             self.followup.question = gq
-            self._fu_hits = {i: self._hits[i] for i in used_ids if i in self._hits}
+            self._fu_hits = {i: hits_map[i] for i in used_ids if i in hits_map}
         return rep
 
     # ---- shared ending ---------------------------------------------------------------------

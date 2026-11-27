@@ -32,6 +32,11 @@ class PreflightTest(unittest.TestCase):
         later = dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=40)
         self.assertEqual(P.tls_check(self.cert, ["192.168.1.10"], now=later).detail, "expired")
 
+    def test_clock_floor_unknown(self):
+        self.assertEqual(P.clock_check(100, None).status, "FAIL")
+        self.assertEqual(P.clock_check(100, 50).status, "PASS")
+        self.assertEqual(P.clock_check(100, 150).status, "WARN")
+
     def test_postfilter(self):
         self.assertEqual(P.postfilter_check(["<|im_end|>"], ["An ordinary sentence."]).status, "PASS")
         self.assertEqual(P.postfilter_check(["a"], []).status, "FAIL")      # 'a' would eat fixed strings

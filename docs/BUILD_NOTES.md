@@ -64,3 +64,15 @@ A review of everything from the brain module onward found 10 issues. All are fix
 10. `/preflight` compared the clock with floor 0. It now uses privd's floor.
 
 The review also noticed that about 50 `__pycache__` files had been committed. They are removed and ignored.
+
+## Code review, round 2 (on the round-1 fixes)
+
+The second review looked only at the round-1 fix commit and found 7 problems inside those fixes:
+
+1. A DEEP notes question lost its search hits during a model swap, because the swap wiped the pipeline and the hits lived on the shared object. Fixed at the root: a request's hits now live in a local dict passed down the call chain.
+2. While DEEP loaded, another request could overwrite the shared hits and follow-up, and two DEEP requests could both start a load. The follow-up is snapshotted before the lock is released, and a DEEP load lock makes a second request wait for the first load.
+3. `retry_window_s` raised KeyError when `load_seconds` lacked a key. It now uses defaults, and config values merge over them.
+4. A snapshot skipped for an untrusted clock waited a full day. It now runs as soon as the clock is trusted.
+5. A refused request was briefly registered, so a quick retry could get 202 and then 404. Refusals are no longer registered.
+6. The stream reader ignored Content-Length, and could wait out the deadline on a non-streamed reply. It now reads exactly Content-Length bytes, limits chunked lines, and hands over partial data on early EOF.
+7. `/preflight` passed the clock check when privd was unreachable. It now fails it.
