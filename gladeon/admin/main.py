@@ -101,6 +101,14 @@ class Admin:
         keys = K.remove(K.load(self.read(KEYS_DB, "[]")), fingerprint)
         return self._write_keys(keys)
 
+    def token_rotate(self, conf_path: str) -> int:
+        """New API token; restarting the proxy closes every connection and locks the vault (P30).
+        Then run client-bundle again for the phone."""
+        import secrets
+        conf = json.loads(self.read(conf_path))
+        self.write(conf["token_file"], secrets.token_urlsafe(32) + "\n", 0o640)
+        return self.run("systemctl", "restart", "gladeon-proxy.service")
+
     def phone_replace(self, new_ip: str, device_id: str) -> int:
         """Idempotent: every step can be re-run (5.3)."""
         if not K.valid_device_id(device_id):
@@ -150,6 +158,7 @@ def main(argv=None) -> int:
     ka.add_argument("pubkey", nargs="+")
     kr = sub.add_parser("key-remove")
     kr.add_argument("fingerprint")
+    sub.add_parser("token-rotate", help="new API token; restarts the proxy (locks the vault)")
     pr = sub.add_parser("phone-replace")
     pr.add_argument("new_ip")
     pr.add_argument("device_id")
@@ -158,6 +167,8 @@ def main(argv=None) -> int:
     try:
         if a.verb == "client-bundle":
             return adm.client_bundle(a.config)
+        if a.verb == "token-rotate":
+            return adm.token_rotate(a.config)
         if a.verb == "key-add":
             return adm.key_add(a.role, " ".join(a.pubkey))
         if a.verb == "key-remove":

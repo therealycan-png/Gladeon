@@ -57,6 +57,15 @@ class AdminVerbsTest(unittest.TestCase):
         self.assertEqual(self.a.phone_replace("192.168.1.25", DEV), 0)     # idempotent
         self.assertEqual(before, {p: self.read(p) for p in before})
 
+    def test_p30_token_rotate_file_side(self):
+        self.a.write("/etc/gladeon/proxy.json", json.dumps({"token_file": "/etc/gladeon/api_token"}))
+        self.a.write("/etc/gladeon/api_token", "old" * 14 + "x\n")
+        self.assertEqual(self.a.token_rotate("/etc/gladeon/proxy.json"), 0)
+        new = self.read("/etc/gladeon/api_token").strip()
+        self.assertEqual(len(new), 43)
+        self.assertNotIn("old", new)
+        self.assertEqual(self.a.ran[-1], ["systemctl", "restart", "gladeon-proxy.service"])
+
     def test_bad_inputs(self):
         self.assertEqual(self.a.phone_replace("192.168.1.25", "nope"), 2)
         with self.assertRaises(ValueError):

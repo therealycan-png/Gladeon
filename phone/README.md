@@ -26,4 +26,4 @@ The token is read by curl from `auth.header` and the passphrase goes through std
 | `gladeon-bundle FILE [PIN]` | imports the client bundle |
 | `gladeon-shutdown [--reboot]` | asks you to type SHUTDOWN or REBOOT first |
 
-Put shortcuts in `~/.shortcuts/` for the Termux:Widget home-screen buttons.
+For home-screen buttons (Termux:Widget), copy `phone/shortcuts/*` into `~/.shortcuts/`. They expect this repo's `phone/` folder at `~/gladeon/phone/`.
