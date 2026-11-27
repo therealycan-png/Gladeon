@@ -164,6 +164,25 @@ class ControllerTest(unittest.TestCase):
         self.assertNotIn("INDEX_UNCALIBRATED", self.ctl.status()["warnings"])
         self.assertEqual(len(os.listdir(os.path.join(self.vault, "backups"))), 1)
 
+    def test_clock_trust_and_correction(self):
+        floor = int(time.time()) + 3600                         # RTC is an hour behind privd's floor
+        self.privd.verbs["vault-status"] = lambda c: Result(0, {"floor": floor})
+        applied = []
+
+        def set_time(c):
+            applied.append(c.args["epoch"])
+            return Result(0) if c.args["epoch"] - floor < 86400 else Result(22)
+        self.privd.verbs["set-time"] = set_time
+        self.ctl.clock_check()
+        self.assertFalse(self.ctl.clock_trusted)
+        self.ctl.client_epoch(floor + 10)                        # phone time >= floor: accepted
+        self.assertTrue(self.ctl.clock_trusted)
+        self.assertEqual(applied, [floor + 10])
+        self.ctl.client_epoch(int(time.time()) + 5)              # small drift: nothing to do
+        self.assertEqual(len(applied), 1)
+        self.ctl.client_epoch(floor + 2 * 86400)                 # beyond the budget
+        self.assertIn("CLOCK_DISAGREES", self.ctl.status()["warnings"])
+
     def test_shutdown(self):
         self.assertEqual(self.ctl.system("shutdown")[0], 202)
         self.assertIn("poweroff", self.calls)

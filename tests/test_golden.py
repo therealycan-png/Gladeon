@@ -46,7 +46,7 @@ class BrainGolden(tc.ControllerTest):
     # skip the inherited tests in this subclass
     test_bad_passphrase_lockout = test_unlock_index_query_lock = test_lock_during_unlock = None
     test_lock_failed = test_auto_lock = test_still_reading_while_new_note_unstable = test_shutdown = None
-    test_maintenance_calibrates_and_snapshots = None
+    test_maintenance_calibrates_and_snapshots = test_clock_trust_and_correction = None
 
     def test_p6c_note_between_polls(self):
         self.unlock_ready()

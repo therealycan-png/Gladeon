@@ -62,6 +62,8 @@ class Controller:
         self.embed_down_since: Optional[float] = None
         self.lock_requested = False
         self.started = clock()
+        self.clock_trusted = False
+        self.clock_drift_s: Optional[int] = None
         self.pipeline = Pipeline(Deps(
             engines={"quick": engines.get("quick"), "deep": engines.get("deep")},
             profiles=cfg.profiles,
@@ -147,7 +149,10 @@ class Controller:
             self.lock()
             return
         self.privd.call("unit-start", {"unit": "llm-embed"})
-        self.privd.call("unit-start", {"unit": "sync"})
+        if self.clock_trusted:                         # 9.4.4: Syncthing only with a trusted clock
+            self.privd.call("unit-start", {"unit": "sync"})
+        else:
+            self.warnings.add("SYNC_WAITING_CLOCK")
         with self.mu:
             self.s.vault, self.s.vault_last_error = "READY", None
             if self.s.engines.get("embed") != "READY":
@@ -172,7 +177,7 @@ class Controller:
         self.brain = b
         notes = os.path.join(self.cfg.vault_root, "notes")
         os.makedirs(notes, exist_ok=True)
-        self.watcher = Watcher(notes, b, cap=self._cap, clock_trusted=lambda: True,
+        self.watcher = Watcher(notes, b, cap=self._cap, clock_trusted=lambda: self.clock_trusted,
                                now=self.clock, wall=self.wall)
         self.calibration_due = True                        # also run once after the first full index
         self.watcher.on_calibration = lambda: setattr(self, "calibration_due", True)
@@ -410,11 +415,50 @@ class Controller:
         except (OSError, ValueError):
             return None
 
+    # ---- clock (10.4-10.6) ------------------------------------------------------------------
+    def clock_check(self) -> None:
+        """Boot rule: now < privd's floor -> untrusted."""
+        st = self.privd.call("vault-status")
+        floor = int(st.data.get("floor") or 0) if st.ok else None
+        self.clock_trusted = floor is not None and int(self.wall()) >= floor
+        if floor is not None and self.clock_trusted is False:
+            self.warnings.add("CLOCK_UNTRUSTED")
+
+    def client_epoch(self, epoch: int) -> None:
+        from ..privd.clock import proxy_correction
+        now = int(self.wall())
+        self.clock_drift_s = epoch - now
+        st = self.privd.call("vault-status")
+        if not st.ok:
+            return
+        target, warn = proxy_correction(epoch, now, self.clock_trusted, int(st.data.get("floor") or 0))
+        if target is None:
+            if self.clock_trusted:
+                self.warnings.discard("CLOCK_DISAGREES")
+            return
+        r = self.privd.call("set-time", {"epoch": int(target)})
+        if r.ok:
+            became = not self.clock_trusted
+            self.clock_trusted = True
+            self.clock_drift_s = 0
+            if became and self.s.vault == "READY":
+                if self.watcher is not None:
+                    self.watcher.reevaluate_all()      # 13.4.2: re-evaluate dates once
+                if "SYNC_WAITING_CLOCK" in self.warnings:
+                    self.privd.call("unit-start", {"unit": "sync"})
+                    self.warnings.discard("SYNC_WAITING_CLOCK")
+            self.warnings.discard("CLOCK_UNTRUSTED")
+            self.warnings.discard("CLOCK_DISAGREES")
+        elif self.clock_trusted:
+            self.warnings.add("CLOCK_DISAGREES")
+
     # ---- /query ----------------------------------------------------------------------------
     def query_blocked(self, mode: str):
         return query_blocked(self.s)
 
     def run_query(self, transcript: str, mode: str, client_epoch) -> dict:
+        if isinstance(client_epoch, int) and client_epoch > 0:
+            self.client_epoch(client_epoch)
         with self.mu:
             self.inflight += 1
             self.last_interactive = self.clock()
@@ -477,4 +521,5 @@ class Controller:
                     "degraded_reason": self.s.degraded_reason, "engines": dict(self.s.engines),
                     "vault": self.s.vault, "vault_last_error": self.s.vault_last_error,
                     "maintenance": self.s.maintenance, "auto_lock_in_s": left, "index": idx,
+                    "clock_trusted": self.clock_trusted, "clock_drift_s": self.clock_drift_s,
                     "warnings": warnings, "uptime_s": int(self.clock() - self.started)}

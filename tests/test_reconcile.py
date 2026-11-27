@@ -10,7 +10,7 @@ from tests import test_controller as tc
 class ReconcileTest(tc.ControllerTest):
     test_bad_passphrase_lockout = test_unlock_index_query_lock = test_lock_during_unlock = None
     test_lock_failed = test_auto_lock = test_still_reading_while_new_note_unstable = test_shutdown = None
-    test_maintenance_calibrates_and_snapshots = None
+    test_maintenance_calibrates_and_snapshots = test_clock_trust_and_correction = None
 
     def status_is(self, **d):
         self.privd.verbs["vault-status"] = lambda c: (self.calls.append("vault-status"), Result(0, d))[1]
