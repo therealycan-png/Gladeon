@@ -15,8 +15,9 @@ if [ $(( $(date +%s) - started )) -gt 30 ]; then   # 11.9.4: stale command dropp
   gl_say "That took too long, so I dropped it. Please ask again."; exit 1
 fi
 rid="$(gl_uuid)"
-gl_request POST /query "$rid" < <(jq -cn --arg t "$text" --arg m "$mode" --argjson e "$(date +%s)" \
-   '{transcript:$t, client_epoch:$e, mode:$m}')
+# the transcript goes through stdin (printf is a builtin), never through any process's argv
+gl_request POST /query "$rid" < <(printf '%s' "$text" | jq -Rsc --arg m "$mode" --argjson e "$(date +%s)" \
+   '{transcript: ., client_epoch: $e, mode: $m}')
 window=210
 if [ "$GL_EXIT" = 28 ] || [ "$GL_CODE" = 202 ]; then
   if [ "$GL_CODE" = 202 ]; then

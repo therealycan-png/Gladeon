@@ -67,7 +67,8 @@ gl_request() {
 gl_field() { printf '%s' "$GL_BODY" | jq -r --arg k "$1" '.[$k] // empty' 2>/dev/null | gl_clean; }
 
 gl_say() {  # speak through the local TTS only (11.11.2)
-  if [ -n "$1" ] && command -v termux-tts-speak >/dev/null; then termux-tts-speak "$1"; fi
+  # text on stdin, not argv, so answers never show up in the process list
+  if [ -n "$1" ] && command -v termux-tts-speak >/dev/null; then printf '%s' "$1" | termux-tts-speak; fi
   return 0
 }
 
